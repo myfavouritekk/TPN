@@ -19,14 +19,15 @@ def _append_boxes(tracks, frame_id, boxes, scores):
             "anchor": frame_id - 1
         })
 
-def naive_box_regression(net_rpn, net_no_rpn, vid_proto):
+def naive_box_regression(net_rpn, net_no_rpn, vid_proto,
+        scheme='max', class_idx=None):
     """Generating tubelet proposals based on the region proposals of first frame."""
 
     track_proto = {}
     track_proto['video'] = vid_proto['video']
     track_proto['method'] = 'naive_box_regression'
     tracks = []
-    mean_boxes = None
+    pred_boxes = None
 
     for idx, frame in enumerate(vid_proto['frames'], start=1):
         # Load the demo image
@@ -37,12 +38,23 @@ def naive_box_regression(net_rpn, net_no_rpn, vid_proto):
         timer = Timer()
         timer.tic()
         if idx == 1:
-            scores, boxes = im_detect(net_rpn, im, mean_boxes)
+            scores, boxes = im_detect(net_rpn, im, pred_boxes)
         else:
-            scores, boxes = im_detect(net_no_rpn, im, mean_boxes)
-        mean_boxes = np.mean(boxes.reshape((boxes.shape[0], -1, 4)), axis=1)
-        # mean_boxes = np.insert(mean_boxes, 0, 0, axis=1)
-        _append_boxes(tracks, frame['frame'], mean_boxes, scores)
+            scores, boxes = im_detect(net_no_rpn, im, pred_boxes)
+
+        boxes = boxes.reshape((boxes.shape[0], -1, 4))
+        if scheme is 'mean' or idx == 1:
+            # use mean regressions as predictios
+            pred_boxes = np.mean(boxes, axis=1)
+        elif scheme is 'max':
+            # use the regressions of the class with the maximum probability
+            # excluding __background__ class
+            max_cls = scores[:,1:].argmax(axis=1) + 1
+            pred_boxes = boxes[np.arange(len(boxes)), max_cls, :]
+        else:
+            # use class specific regression as predictions
+            pred_boxes = boxes[:,class_idx,:]
+        _append_boxes(tracks, frame['frame'], pred_boxes, scores)
         timer.toc()
         print ('Detection took {:.3f}s for '
                '{:d} object proposals').format(timer.total_time, boxes.shape[0])
