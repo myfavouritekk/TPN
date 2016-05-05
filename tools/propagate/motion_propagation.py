@@ -98,8 +98,10 @@ if __name__ == '__main__':
 
 
     # propagation
-    for local_idx, (frame, det_file, flow_file) in \
-            enumerate(zip(vid_proto['frames'], det_files, flow_files)):
+    for local_idx, (frame, det_file) in \
+            enumerate(zip(vid_proto['frames'], det_files)):
+        flow_file = os.path.join(args.flow_dir,
+            '{}.png'.format(os.splitext(det_file)[0]))
         print "Propagating frame {}".format(local_idx+1)
         det = sio.loadmat(det_file)
         # read optical flows
@@ -151,5 +153,5 @@ if __name__ == '__main__':
     for frame, boxes, scores in zip(vid_proto['frames'], all_boxes, all_scores):
         frame_name = os.path.splitext(frame['path'])[0]
         sio.savemat(os.path.join(args.save_dir, frame_name+'.mat'),
-            {'boxes': boxes, 'zs': scores})
+            {'boxes': boxes, 'zs': scores}, do_compression=True)
 

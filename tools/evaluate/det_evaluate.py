@@ -61,7 +61,10 @@ if __name__ == '__main__':
     fp = open(args.save_file, 'w')
 
     vidfiles = glob.glob(os.path.join(args.vid_root, '*.vid'))
-    detfiles = glob.glob(os.path.join(args.det_root, '*.det*'))
+    det_files = [os.path.join(args.raw_det_root,
+    '{}.det'.format(os.path.splitext(os.path.basename(vid_file))[0])) \
+        for vid_file in vidfiles]
+
     input_list = []
     for vid_file, det_file in zip(vidfiles, detfiles):
         input_list.append((vid_file, det_file, image_set))
