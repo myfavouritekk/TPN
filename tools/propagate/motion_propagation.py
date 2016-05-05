@@ -77,11 +77,9 @@ if __name__ == '__main__':
     half_tws = (window - 1) / 2
 
     vid_proto = proto_load(args.vid_file)
-    det_files = glob.glob(os.path.join(args.det_dir, '*.mat'))
-    flow_files = glob.glob(os.path.join(args.flow_dir, '*.png'))
+    det_files = sorted(glob.glob(os.path.join(args.det_dir, '*.mat')))
     n_frames = len(vid_proto['frames'])
     assert len(vid_proto['frames']) == len(det_files)
-    assert len(vid_proto['frames']) == len(flow_files)
     all_boxes = []
     all_scores = []
     num_boxes_before = 0
@@ -100,9 +98,12 @@ if __name__ == '__main__':
     # propagation
     for local_idx, (frame, det_file) in \
             enumerate(zip(vid_proto['frames'], det_files)):
+        det_file_name = os.path.splitext(os.path.basename(det_file))[0]
+        assert os.path.splitext(frame['path'])[0] == det_file_name
         flow_file = os.path.join(args.flow_dir,
-            '{}.png'.format(os.splitext(det_file)[0]))
-        print "Propagating frame {}".format(local_idx+1)
+            '{}.png'.format(det_file_name))
+
+        print "Propagating frame {}: {}".format(frame['frame'], frame['path'])
         det = sio.loadmat(det_file)
         # read optical flows
         # rgb is reversed to bgr when using opencv
