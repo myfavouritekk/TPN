@@ -35,7 +35,7 @@ if __name__ == '__main__':
         boxes = det['boxes'][:,cls_index,:]
         scores = det['zs'][:,cls_index]
         keep = nms(np.hstack((boxes,scores[:,np.newaxis])), 0.3)
-        det_img = add_bbox(img, [boxes[i,:] for i in keep])
+        det_img = add_bbox(img, [boxes[i,:] for i in keep], [scores[i] for i in keep])
         cv2.imshow('detection', det_img)
         if cv2.waitKey(0) == ord('q'):
             cv2.destroyAllWindows()
