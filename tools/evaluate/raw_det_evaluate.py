@@ -20,12 +20,13 @@ def image_name_at_frame(vid_proto, frame_idx):
 def single_vid_raw_det_eval(input_list):
     vid_file, det_folder, image_set = input_list
     vid_proto = proto_load(vid_file)
-    det_files = glob.glob(os.path.join(det_folder, '*.mat'))
     print vid_proto['video']
 
     # dets are [frame_idx, class_index, cls_score, x1, y1, x2, y2]
     dets = []
-    for frame, det_file in zip(vid_proto['frames'], det_files):
+    for frame in vid_proto['frames']:
+        frame_name = os.path.splitext(frame['path'])[0]
+        det_file = os.path.join(det_folder, "{}.mat".format(frame_name))
         local_idx = frame['frame']
         try:
             det = sio.loadmat(det_file)
