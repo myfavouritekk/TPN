@@ -62,10 +62,11 @@ def naive_box_regression(net_rpn, net_no_rpn, vid_proto,
     return track_proto
 
 
-def _box_proto_to_track(box_proto, max_frame, length):
+def _box_proto_to_track(box_proto, max_frame, length, sample_rate):
     # generate empty tracks according to box proto
     tracks = []
     for box in box_proto['boxes']:
+        if (box['frame'] - 1) % sample_rate != 0: continue
         track = []
         for i in xrange(length):
             if i == 0:
@@ -103,13 +104,14 @@ def _update_track(tracks, pred_boxes, track_index, frame_id):
                 box['roi'] = pred_box.tolist()
                 break
 
-def roi_propagation(vid_proto, box_proto, net, scheme='max', length=None):
+def roi_propagation(vid_proto, box_proto, net, scheme='max', length=None,
+        sample_rate=1, cls_indices=None):
     track_proto = {}
     track_proto['video'] = vid_proto['video']
     track_proto['method'] = 'roi_propagation'
     max_frame = vid_proto['frames'][-1]['frame']
     if not length: length = max_frame
-    tracks = _box_proto_to_track(box_proto, max_frame, length)
+    tracks = _box_proto_to_track(box_proto, max_frame, length, sample_rate)
     batch_size = 1024
 
     for idx, frame in enumerate(vid_proto['frames'], start=1):
@@ -120,6 +122,7 @@ def roi_propagation(vid_proto, box_proto, net, scheme='max', length=None):
         # Detect all object classes and regress object bounds
         # extract rois on the current frame
         rois, track_index = _cur_rois(tracks, frame['frame'])
+        if len(rois) == 0: continue
         # print "Frame {}: {} proposals".format(frame['frame'], len(rois))
         timer = Timer()
         timer.tic()
@@ -133,21 +136,28 @@ def roi_propagation(vid_proto, box_proto, net, scheme='max', length=None):
         scores = np.concatenate(scores, axis=0)
         boxes = np.concatenate(boxes, axis=0)
         boxes = boxes.reshape((boxes.shape[0], -1, 4))
+        if cls_indices is not None:
+            boxes = boxes[:, cls_indices, :]
+            scores = scores[:, cls_indices]
 
-        if scheme is 'mean':
+        if scheme == 'mean':
             # use mean regressions as predictios
             pred_boxes = np.mean(boxes, axis=1)
-        elif scheme is 'max':
+        elif scheme == 'max':
             # use the regressions of the class with the maximum probability
             # excluding __background__ class
             max_cls = scores[:,1:].argmax(axis=1) + 1
             pred_boxes = boxes[np.arange(len(boxes)), max_cls, :]
-        elif scheme is 'weighted':
+        elif scheme == 'weighted':
             # use class specific regression as predictions
+            boxes = boxes[:,1:,:]
+            scores = scores[:,1:]
             pred_boxes = np.sum(boxes * scores[:,:,np.newaxis], axis=1) / np.sum(scores, axis=1, keepdims=True)
+        else:
+            raise ValueError("Unknown scheme {}.".format(scheme))
         _update_track(tracks, pred_boxes, track_index, frame['frame'])
         timer.toc()
-        print ('Detection took {:.3f}s for '
-               '{:d} object proposals').format(timer.total_time, len(rois))
+        print ('Frame {}: Detection took {:.3f}s for '
+               '{:d} object proposals').format(frame['frame'], timer.total_time, len(rois))
     track_proto['tracks'] = tracks
     return track_proto

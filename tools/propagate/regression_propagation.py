@@ -15,7 +15,7 @@ import argparse
 import cPickle
 
 from vdetlib.utils.protocol import proto_load, proto_dump, frame_path_at
-from vdetlib.vdet.dataset import imagenet_vdet_classes, imagenet_det_200_class_idx
+from vdetlib.vdet.dataset import index_vdet_to_det
 from tpn.propagate import roi_propagation
 
 def parse_args():
@@ -32,6 +32,8 @@ def parse_args():
                         choices=['max', 'mean', 'weighted'], default='weighted')
     parser.add_argument('--length', type=int, default=9,
                         help='Propagation length. [9]')
+    parser.add_argument('--sample_rate', type=int, default=1,
+                        help='Temporal subsampling rate. [1]')
     args = parser.parse_args()
 
     return args
@@ -52,6 +54,6 @@ if __name__ == '__main__':
     box_proto = proto_load(args.box_file)
 
     track_proto = roi_propagation(vid_proto, box_proto, net, scheme=args.scheme,
-        length=args.length)
+        length=args.length, sample_rate=args.sample_rate, cls_indices=index_vdet_to_det.values())
 
     proto_dump(track_proto, args.save_file)
