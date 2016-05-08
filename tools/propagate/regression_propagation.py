@@ -40,6 +40,7 @@ def parse_args():
 
 if __name__ == '__main__':
     # cfg.TEST.HAS_RPN = False  # Use RPN for proposals
+    cfg.DEDUP_BOXES = 0
 
     args = parse_args()
 
@@ -54,6 +55,7 @@ if __name__ == '__main__':
     box_proto = proto_load(args.box_file)
 
     track_proto = roi_propagation(vid_proto, box_proto, net, scheme=args.scheme,
-        length=args.length, sample_rate=args.sample_rate, cls_indices=index_vdet_to_det.values())
+        length=args.length, sample_rate=args.sample_rate, cls_indices=index_vdet_to_det.values(),
+        keep_feat=True)
 
     proto_dump(track_proto, args.save_file)

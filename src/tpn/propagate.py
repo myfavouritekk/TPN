@@ -95,24 +95,35 @@ def _cur_rois(tracks, frame_id):
                 break
     return rois, index
 
-def _update_track(tracks, pred_boxes, track_index, frame_id):
-    for i, pred_box in zip(track_index, pred_boxes):
-        for box in tracks[i]:
-            if box['frame'] == frame_id:
-                box['bbox'] = pred_box.tolist()
-            if box['frame'] == frame_id + 1:
-                box['roi'] = pred_box.tolist()
-                break
+def _update_track(tracks, pred_boxes, scores, features, track_index, frame_id):
+    if features is not None:
+        for i, pred_box, cls_scores, feat in zip(track_index, pred_boxes, scores, features):
+            for box in tracks[i]:
+                if box['frame'] == frame_id:
+                    box['bbox'] = pred_box.tolist()
+                    box['scores'] = cls_scores.tolist()
+                    box['feature'] = feat.tolist()
+                if box['frame'] == frame_id + 1:
+                    box['roi'] = pred_box.tolist()
+                    break
+    else:
+        for i, pred_box, cls_scores in zip(track_index, pred_boxes, scores):
+            for box in tracks[i]:
+                if box['frame'] == frame_id:
+                    box['bbox'] = pred_box.tolist()
+                    box['scores'] = cls_scores.tolist()
+                if box['frame'] == frame_id + 1:
+                    box['roi'] = pred_box.tolist()
+                    break
 
 def roi_propagation(vid_proto, box_proto, net, scheme='max', length=None,
-        sample_rate=1, cls_indices=None):
+        sample_rate=1, cls_indices=None, keep_feat=False):
     track_proto = {}
     track_proto['video'] = vid_proto['video']
     track_proto['method'] = 'roi_propagation'
     max_frame = vid_proto['frames'][-1]['frame']
     if not length: length = max_frame
     tracks = _box_proto_to_track(box_proto, max_frame, length, sample_rate)
-    batch_size = 1024
 
     for idx, frame in enumerate(vid_proto['frames'], start=1):
         # Load the demo image
@@ -126,20 +137,35 @@ def roi_propagation(vid_proto, box_proto, net, scheme='max', length=None,
         # print "Frame {}: {} proposals".format(frame['frame'], len(rois))
         timer = Timer()
         timer.tic()
+
+
         # scores: n x c, boxes: n x (c x 4)
         scores = []
         boxes = []
+        features = []
+        # split to several batches to avoid memory error
+        batch_size = 1024
         for roi_batch in np.split(np.asarray(rois), range(0, len(rois), batch_size)[1:]):
             s_batch, b_batch = im_detect(net, im, np.asarray(roi_batch))
+            f_batch = net.blobs['global_pool'].data.copy().squeeze()
             scores.append(s_batch)
             boxes.append(b_batch)
+            features.append(f_batch)
         scores = np.concatenate(scores, axis=0)
         boxes = np.concatenate(boxes, axis=0)
         boxes = boxes.reshape((boxes.shape[0], -1, 4))
+        if keep_feat:
+            features = np.concatenate(features, axis=0)
+            assert features.shape[0] == scores.shape[0]
+        else:
+            features = None
         if cls_indices is not None:
             boxes = boxes[:, cls_indices, :]
             scores = scores[:, cls_indices]
+            # scores normalization
+            scores = scores / np.sum(scores, axis=1, keepdims=True)
 
+        # propagation schemes
         if scheme == 'mean':
             # use mean regressions as predictios
             pred_boxes = np.mean(boxes, axis=1)
@@ -155,7 +181,9 @@ def roi_propagation(vid_proto, box_proto, net, scheme='max', length=None,
             pred_boxes = np.sum(boxes * scores[:,:,np.newaxis], axis=1) / np.sum(scores, axis=1, keepdims=True)
         else:
             raise ValueError("Unknown scheme {}.".format(scheme))
-        _update_track(tracks, pred_boxes, track_index, frame['frame'])
+
+        # update track bbox
+        _update_track(tracks, pred_boxes, scores, features, track_index, frame['frame'])
         timer.toc()
         print ('Frame {}: Detection took {:.3f}s for '
                '{:d} object proposals').format(frame['frame'], timer.total_time, len(rois))
