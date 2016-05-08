@@ -28,7 +28,7 @@ if __name__ == '__main__':
         img = imread(frame_path_at(vid_proto, frame['frame']))
         boxes = [track_box_at_frame(tracklet, frame['frame']) \
                 for tracklet in track_proto['tracks']]
-        tracked = add_bbox(img, boxes, None, 2)
+        tracked = add_bbox(img, boxes, None, None, 2)
         if args.save_dir:
             if not os.path.isdir(args.save_dir):
                 try:
