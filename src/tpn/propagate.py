@@ -116,7 +116,7 @@ def _update_track(tracks, pred_boxes, scores, features, track_index, frame_id):
                     box['roi'] = pred_box.tolist()
                     break
 
-def roi_propagation(vid_proto, box_proto, net, scheme='max', length=None,
+def roi_propagation(vid_proto, box_proto, net, det_fun=im_detect, scheme='max', length=None,
         sample_rate=1, cls_indices=None, keep_feat=False):
     track_proto = {}
     track_proto['video'] = vid_proto['video']
@@ -146,7 +146,7 @@ def roi_propagation(vid_proto, box_proto, net, scheme='max', length=None,
         # split to several batches to avoid memory error
         batch_size = 1024
         for roi_batch in np.split(np.asarray(rois), range(0, len(rois), batch_size)[1:]):
-            s_batch, b_batch = im_detect(net, im, np.asarray(roi_batch))
+            s_batch, b_batch = det_fun(net, im, np.asarray(roi_batch))
             f_batch = net.blobs['global_pool'].data.copy().squeeze()
             scores.append(s_batch)
             boxes.append(b_batch)
