@@ -116,6 +116,42 @@ def _update_track(tracks, pred_boxes, scores, features, track_index, frame_id):
                 if box['frame'] == frame_id + 1:
                     box['roi'] = pred_box.tolist()
                     break
+"""
+- modified track_proto
+
+    ```json
+        {
+            "video": "video_name",
+            "method": "tracking_method_name",
+            "tracks": [
+                [
+                    {
+                        "frame": 1,
+                        "bbox": [x1, y1, x2, y2], // bbox predictions
+                        // regions of interest, bbox before prediction
+                        "roi": [x1, y1, x2, y2],
+                        "scores": [...],
+                        "features": [....]
+                        "anchor": int
+                    },
+                    {
+                        "frame": 2,
+                        "bbox": [x1, y1, x2, y2], // bbox predictions
+                        // regions of interest, bbox before prediction
+                        "roi": [x1, y1, x2, y2],
+                        "scores": [...],
+                        "features": [....]
+                        "anchor": int
+                    }
+                ],  // tracklet 1
+                [
+                    // tracklet 2
+                ]
+                // ...
+            ]
+        }
+    ```
+"""
 
 def roi_propagation(vid_proto, box_proto, net, det_fun=im_detect, scheme='max', length=None,
         sample_rate=1, cls_indices=None, keep_feat=False):
