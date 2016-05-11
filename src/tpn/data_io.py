@@ -19,12 +19,8 @@ def save_track_proto_to_zip(track_proto, save_file):
     print "Writing to zip file {}...".format(save_file)
     for track_id, track in enumerate(track_proto['tracks']):
         track_obj = {}
-        track_obj['frames'] = np.asarray([box['frame'] for box in track])
-        track_obj['anchors'] = np.asarray([box['anchor'] for box in track])
-        track_obj['scores'] = np.asarray([box['scores'] for box in track])
-        track_obj['features'] = np.asarray([box['feature'] for box in track])
-        track_obj['boxes'] = np.asarray([box['bbox'] for box in track])
-        track_obj['rois'] = np.asarray([box['roi'] for box in track])
+        for key in track[0]:
+            track_obj[key] = np.asarray([box[key] for box in track])
         zf.writestr('{:06d}.pkl'.format(track_id),
             cPickle.dumps(track_obj, cPickle.HIGHEST_PROTOCOL))
         if (track_id + 1) % 1000 == 0:
