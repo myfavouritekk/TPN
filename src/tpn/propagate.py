@@ -69,6 +69,7 @@ def _box_proto_to_track(box_proto, max_frame, length, sample_rate):
         if (box['frame'] - 1) % sample_rate != 0: continue
         track = []
         for i in xrange(length):
+            if box['frame'] + i > max_frame: break
             if i == 0:
                 track_box = {
                     "frame": box['frame'] + i,
