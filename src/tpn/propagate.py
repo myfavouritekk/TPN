@@ -177,9 +177,9 @@ def roi_propagation(vid_proto, box_proto, net, det_fun=im_detect, scheme='max', 
             pred_boxes = boxes[np.arange(len(boxes)), max_cls, :]
         elif scheme == 'weighted':
             # use class specific regression as predictions
-            boxes = boxes[:,1:,:]
-            scores = scores[:,1:]
-            pred_boxes = np.sum(boxes * scores[:,:,np.newaxis], axis=1) / np.sum(scores, axis=1, keepdims=True)
+            cls_boxes = boxes[:,1:,:]
+            cls_scores = scores[:,1:]
+            pred_boxes = np.sum(cls_boxes * cls_scores[:,:,np.newaxis], axis=1) / np.sum(cls_scores, axis=1, keepdims=True)
         else:
             raise ValueError("Unknown scheme {}.".format(scheme))
 
