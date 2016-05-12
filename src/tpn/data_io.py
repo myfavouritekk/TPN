@@ -15,7 +15,7 @@ import numpy as np
     }
 """
 def save_track_proto_to_zip(track_proto, save_file):
-    zf = zipfile.ZipFile(save_file, 'w')
+    zf = zipfile.ZipFile(save_file, 'w', allowZip64=True)
     print "Writing to zip file {}...".format(save_file)
     for track_id, track in enumerate(track_proto['tracks']):
         track_obj = {}
