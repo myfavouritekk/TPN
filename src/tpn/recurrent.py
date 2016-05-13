@@ -7,6 +7,7 @@ import time
 import numpy as np
 import tensorflow as tf
 from tensorflow.models.rnn import rnn
+from rnn_cells import TPNLSTMCell
 from data_io import tpn_iterator, tpn_raw_data
 
 flags = tf.flags
@@ -42,6 +43,7 @@ class TPNModel(object):
     self._end_targets = tf.placeholder(tf.float32, [batch_size, num_steps])
 
     lstm_cell = tf.nn.rnn_cell.BasicLSTMCell(size, forget_bias=1.)
+    # lstm_cell = TPNLSTMCell(size, forget_bias=1.)
     if is_training and config.keep_prob < 1:
       lstm_cell = tf.nn.rnn_cell.DropoutWrapper(
           lstm_cell, output_keep_prob=config.keep_prob)
@@ -96,10 +98,12 @@ class TPNModel(object):
     self._bbox_cost = bbox_cost = tf.reduce_sum(loss_bbox) / batch_size / num_steps / 4.
 
     # ending signal
-    end_w = tf.get_variable("end_w", [size, 1])
-    end_b = tf.get_variable("end_b", [1])
+    end_w = tf.get_variable("end_w", [size, 1], initializer=tf.random_uniform_initializer(-0.001, 0.001))
+    end_b = tf.get_variable("end_b", [1], initializer=tf.constant_initializer(0.))
     end_pred = tf.matmul(output, end_w) + end_b
     end_targets = tf.reshape(tf.transpose(self._end_targets), [-1, 1])
+    # import pdb
+    # pdb.set_trace()
     loss_ending = tf.nn.seq2seq.sequence_loss_by_example(
         [end_pred],
         [end_targets],
@@ -179,10 +183,10 @@ class TPNModel(object):
 
 class DefaultConfig(object):
   """Default config."""
-  init_scale = 0.1
-  learning_rate = 1.0
+  init_scale = 0.01
+  learning_rate = 0.001
   max_grad_norm = 5
-  num_layers = 2
+  num_layers = 1
   num_steps = 20
   input_size = 1024
   hidden_size = 1024
@@ -192,6 +196,11 @@ class DefaultConfig(object):
   lr_decay = 0.5
   batch_size = 128
   num_classes = 31
+  cls_weight = 1.0
+  bbox_weight = 0.0
+  ending_weight = 0.0
+  vid_per_batch = 4
+
 
 class TestConfig(object):
   """Tiny config, for testing."""

@@ -111,8 +111,8 @@ def tpn_iterator(raw_data, batch_size, num_steps, num_classes, num_vids, fg_rati
                     track_length = track[key].shape[0]
                     if key == 'class_label':
                         expend_res = -np.ones((num_steps,) + track[key].shape[1:])
-                    elif key == 'end_label':
-                        expend_res = np.ones((num_steps,) + track[key].shape[1:])
+                    # elif key == 'end_label':
+                    #     expend_res = np.ones((num_steps,) + track[key].shape[1:])
                     else:
                         expend_res = np.zeros((num_steps,) + track[key].shape[1:])
                     expend_res[:track_length] = track[key]
