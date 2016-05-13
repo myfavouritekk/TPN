@@ -34,7 +34,7 @@ def add_track_targets(track_proto, annot_proto):
             frame_index = box['frame'] - 1
             if frame_index >= max_gt_frame: # no gt as the end of video
                 box['class_label'] = 0
-                box['bbox_target'] = [0, 0, 0, 0]
+                box['bbox_target'] = [[0, 0, 0, 0]]
                 continue
             roi = box['roi']
             overlaps = bbox_overlaps(
@@ -52,13 +52,13 @@ def add_track_targets(track_proto, annot_proto):
                 else:
                     # still on background
                     box['class_label'] = 0
-                    box['bbox_target'] = [0, 0, 0, 0]
+                    box['bbox_target'] = [[0, 0, 0, 0]]
                     continue
             assert target_obj != -1
             # if target disappears
             if processed_annot['exist'][target_obj, frame_index] == 0:
                 box['class_label'] = -1
-                box['bbox_target'] = [0, 0, 0, 0]
+                box['bbox_target'] = [[0, 0, 0, 0]]
                 continue
 
             # target still exists
