@@ -5,6 +5,7 @@ import cPickle
 import numpy as np
 import glob
 import os.path as osp
+import random
 
 """
     track_obj: {
@@ -51,16 +52,74 @@ def tpn_raw_data(data_path):
             print "Totally {} files checked.".format(ind)
     return valid_train_set, valid_val_set
 
-def tpn_iterator(raw_data, batch_size, num_steps, num_classes):
+
+def _expand_bbox_targets(bbox_targets, class_labels, num_classes, num_steps):
+    # expend_targets: num_steps * (num_classes * 4)
+    # weights: num_steps * (num_classes * 4)
+    expend_targets = np.zeros((num_steps, num_classes, 4), dtype=np.float)
+    weights = np.zeros_like(expend_targets, dtype=np.float)
+    for ind, (target, cls) in enumerate(zip(bbox_targets, class_labels)):
+        if cls == 0: continue
+        expend_targets[ind, cls, :] = np.asarray(target).flatten()
+        weights[ind, cls, :] = 1.
+    return expend_targets.reshape((num_steps, -1)), weights.reshape((num_steps, -1))
+
+
+def tpn_iterator(raw_data, batch_size, num_steps, num_classes, num_vids, fg_ratio=None):
     """ return values:
             x, cls_t, bbox_t, end_t
             x: input features
-                [batch_size, input_size, num_steps]
+                [batch_size, num_steps, input_size]
             cls_t: classification targets
+                [batch_size, num_steps]
+            end_t: ending prediction targets
                 [batch_size, num_steps]
             bbox_t: bounding box regression targets
                 [batch_size, num_steps, num_classes * 4]
-            end_t: ending prediction targets
-                [batch_size, num_steps]
+            bbox_weights: bounding box regression weights
+                [batch_size, num_steps, num_classes * 4]
     """
-    pass
+    keys = ['feature', 'class_label', 'end_label', 'bbox_target']
+    temp_res = {}
+    for key in keys: temp_res[key] = []
+    temp_res['bbox_weights'] = []
+    rand_vids = random.sample(raw_data, num_vids)
+    assert batch_size % num_vids == 0
+    sample_per_vid = batch_size / num_vids
+
+    for vid in rand_vids:
+        zf = zipfile.ZipFile(vid)
+        track_list = zf.namelist()
+        if fg_ratio is None:
+            # natural distribution
+            try:
+                track_samples = sorted(random.sample(track_list, sample_per_vid))
+            except:
+                print len(track_list)
+                raise
+        else:
+            raise NotImplementedError('Track foreground ratio is not yet supported.')
+        for ind, track_name in enumerate(track_samples):
+            track = cPickle.loads(zf.read(track_name))
+            for key in keys:
+                if key == 'bbox_target':
+                    targets, weights = _expand_bbox_targets(track[key],
+                        track['class_label'], num_classes, num_steps)
+                    temp_res[key].append(targets)
+                    temp_res['bbox_weights'].append(weights)
+                else:
+                    track_length = track[key].shape[0]
+                    if key == 'class_label':
+                        expend_res = -np.ones((num_steps,) + track[key].shape[1:])
+                    elif key == 'end_label':
+                        expend_res = np.ones((num_steps,) + track[key].shape[1:])
+                    else:
+                        expend_res = np.zeros((num_steps,) + track[key].shape[1:])
+                    expend_res[:track_length] = track[key]
+                    temp_res[key].append(expend_res)
+        zf.close()
+    res = []
+    for key in keys:
+        res.append(np.stack(temp_res[key]))
+    res.append(np.stack(temp_res['bbox_weights']))
+    return tuple(res)
