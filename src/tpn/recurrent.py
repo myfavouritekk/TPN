@@ -28,18 +28,20 @@ class TPNModel(object):
     self.num_steps = num_steps = config.num_steps
     self.input_size = input_size = config.input_size
     self.num_classes = num_classes = config.num_classes
+    self.vid_per_batch = config.vid_per_batch
     size = config.hidden_size
+    self.cls_weight = config.cls_weight
+    self.bbox_weight = config.bbox_weight
+    self.ending_weight = config.ending_weight
 
     # placeholders for inputs and outputs
-    self._input_data = inputs = tf.placeholder(tf.float32, [batch_size, input_size, num_steps])
+    self._input_data = inputs = tf.placeholder(tf.float32, [batch_size, num_steps, input_size])
     self._cls_targets = tf.placeholder(tf.int32, [batch_size, num_steps])
     self._bbox_targets = tf.placeholder(tf.float32, [batch_size, num_steps, num_classes * 4])
-    self._ending_targets = tf.placeholder(tf.float32, [batch_size, num_steps])
+    self._bbox_weights = tf.placeholder(tf.float32, [batch_size, num_steps, num_classes * 4])
+    self._end_targets = tf.placeholder(tf.float32, [batch_size, num_steps])
 
-    # Slightly better results can be obtained with forget gate biases
-    # initialized to 1 but the hyperparameters of the model would need to be
-    # different than reported in the paper.
-    lstm_cell = tf.nn.rnn_cell.BasicLSTMCell(size, forget_bias=0.0)
+    lstm_cell = tf.nn.rnn_cell.BasicLSTMCell(size, forget_bias=1.)
     if is_training and config.keep_prob < 1:
       lstm_cell = tf.nn.rnn_cell.DropoutWrapper(
           lstm_cell, output_keep_prob=config.keep_prob)
@@ -58,23 +60,25 @@ class TPNModel(object):
     # The alternative version of the code below is:
     #
     # original inputs: batch_size * input_size * num_steps
-    # after process: num_step * [batch_size, input_size]
-    inputs = [tf.squeeze(input_, [2])
-              for input_ in tf.split(2, num_steps, inputs)]
+    # after process: num_steps * [batch_size, input_size]
+    inputs = [tf.squeeze(input_, [1])
+              for input_ in tf.split(1, num_steps, inputs)]
     outputs, state = rnn.rnn(cell, inputs, initial_state=self._initial_state)
+    # output: (num_steps * batch_size) * input_size
     output = tf.reshape(tf.concat(1, outputs), [-1, size])
 
     # build losses
     # class score
     softmax_w = tf.get_variable("softmax_w", [size, num_classes])
-    softmax_b = tf.get_variable("softmax_b", [num_classes])
+    softmax_b = tf.get_variable("softmax_b", [num_classes], initializer=tf.constant_initializer(0.))
     logits = tf.matmul(output, softmax_w) + softmax_b
+    cls_targets = tf.reshape(tf.transpose(self._cls_targets), [-1])
     loss_cls_score = tf.nn.seq2seq.sequence_loss_by_example(
         [logits],
-        [tf.reshape(self._cls_targets, [-1])],
+        [cls_targets],
         [tf.ones([batch_size * num_steps])],
         name="loss_cls_score")
-    self._cls_cost = cls_cost = tf.reduce_sum(loss_cls_score) / batch_size
+    self._cls_cost = cls_cost = tf.reduce_sum(loss_cls_score) / batch_size / num_steps
 
     # boudning box regression: SmoothL1Loss
     #  f(x) = 0.5 * x^2    if |x| < 1
@@ -86,23 +90,25 @@ class TPNModel(object):
     bbox_targets = tf.reshape(tf.transpose(self._bbox_targets, (1, 0, 2)), [-1, 4 * num_classes])
     bbox_diff = tf.abs(tf.sub(bbox_pred, bbox_targets))
     less = tf.to_float(tf.less(bbox_diff, tf.constant(1.)))
-    loss_bbox = tf.mul(less, tf.nn.l2_loss(bbox_diff)) + \
-        tf.mul(1 - less, bbox_diff - tf.constant(0.5))
-    self._bbox_cost = bbox_cost = tf.reduce_sum(loss_bbox) / batch_size
+    bbox_weights = tf.reshape(self._bbox_weights, [-1, 4 * num_classes])
+    loss_bbox = tf.mul(tf.mul(less, tf.nn.l2_loss(bbox_diff)) + \
+        tf.mul(1 - less, bbox_diff - tf.constant(0.5)), bbox_weights)
+    self._bbox_cost = bbox_cost = tf.reduce_sum(loss_bbox) / batch_size / num_steps / 4.
 
     # ending signal
     end_w = tf.get_variable("end_w", [size, 1])
     end_b = tf.get_variable("end_b", [1])
     end_pred = tf.matmul(output, end_w) + end_b
+    end_targets = tf.reshape(tf.transpose(self._end_targets), [-1, 1])
     loss_ending = tf.nn.seq2seq.sequence_loss_by_example(
         [end_pred],
-        [tf.reshape(self._ending_targets, [-1, 1])],
+        [end_targets],
         [tf.ones([batch_size * num_steps])],
         softmax_loss_function=tf.nn.sigmoid_cross_entropy_with_logits,
         name="loss_ending")
-    self._end_cost = end_cost = tf.reduce_sum(loss_ending) / batch_size
+    self._end_cost = end_cost = tf.reduce_sum(loss_ending) / batch_size / num_steps
 
-    self._cost = cost = tf.add_n([cls_cost, bbox_cost, end_cost])
+    self._cost = cost = tf.add_n([cls_cost * self.cls_weight, bbox_cost * self.bbox_weight, end_cost * self.ending_weight])
     self._final_state = state
 
     if not is_training:
@@ -129,6 +135,10 @@ class TPNModel(object):
   @property
   def bbox_targets(self):
     return self._bbox_targets
+
+  @property
+  def bbox_weights(self):
+    return self._bbox_weights
 
   @property
   def end_targets(self):
@@ -201,30 +211,45 @@ class TestConfig(object):
 
 def run_epoch(session, m, data, eval_op, verbose=False):
   """Runs the model on the given data."""
-  epoch_size = ((len(data) // m.batch_size) - 1) // m.num_steps
+  # epoch_size = ((len(data) // m.batch_size) - 1) // m.num_steps
   start_time = time.time()
   costs = 0.0
-  iters = 0
+  cls_costs = 0.0
+  bbox_costs = 0.0
+  end_costs = 0.0
+  display_iter = 100.
   state = m.initial_state.eval()
-  for step, (x, cls_t, bbox_t, end_t) in enumerate(tpn_iterator(data, m.batch_size,
-      m.num_steps, m.num_classes)):
+  for step in xrange(10000):
+    x, cls_t, end_t, bbox_t, bbox_weights = tpn_iterator(data, m.batch_size, m.num_steps, m.num_classes, m.vid_per_batch)
+    # import pdb
+    # pdb.set_trace()
     cost, cls_cost, bbox_cost, end_cost, state, _ = session.run(
         [m.cost, m.cls_cost, m.bbox_cost, m.end_cost, m.final_state, eval_op],
          {m.input_data: x,
           m.cls_targets: cls_t,
           m.bbox_targets: bbox_t,
+          m.bbox_weights: bbox_weights,
           m.end_targets: end_t,
           m.initial_state: state})
     costs += cost
     cls_costs += cls_cost
     bbox_costs += bbox_cost
     end_costs += end_cost
-    iters += m.num_steps
 
-    if verbose and step % (epoch_size // 10) == 10:
-      print("%.3f total cost: %.3f cls_cost: %.3f bbox_cost: %.3f ending_cost: %.3f speed: %.0f wps" %
-            (step * 1.0 / epoch_size, cost, cls_costs, bbox_costs, end_costs,
-             iters * m.batch_size / (time.time() - start_time)))
+    if verbose and (step + 1) % display_iter == 0:
+      costs /= display_iter
+      cls_costs /= display_iter
+      bbox_costs /= display_iter
+      end_costs /= display_iter
+      print "Iter {:06d}: cost {:.03f} = cls_cost {:.03f} * {:.02f} + end_cost {:.03f} * {:.02f} + bbox_cost {:.03f} * {:.02f}".format(
+        step+1, costs, cls_costs, m.cls_weight,
+                      end_costs, m.ending_weight,
+                      bbox_costs, m.bbox_weight)
+      costs = 0.0
+      cls_costs = 0.0
+      bbox_costs = 0.0
+      end_costs = 0.0
+      start_time = time.time()
 
   return costs
 
