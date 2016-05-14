@@ -44,8 +44,10 @@ def tpn_raw_data(data_path):
         for ind, orig_vid in enumerate(orig_set, start=1):
             if zipfile.is_zipfile(orig_vid):
                 valid_set.append(orig_vid)
+            elif osp.isdir(orig_vid):
+                valid_set.append(orig_vid)
             else:
-                print "{} is not a valid zip file".format(orig_vid)
+                print "{} is not a valid zip file or a directory".format(orig_vid)
             if ind % 1000 == 0:
                 print "{} files checked.".format(ind)
         if ind % 1000 != 0:
@@ -88,19 +90,34 @@ def tpn_iterator(raw_data, batch_size, num_steps, num_classes, num_vids, fg_rati
     sample_per_vid = batch_size / num_vids
 
     for vid in rand_vids:
-        zf = zipfile.ZipFile(vid)
-        track_list = zf.namelist()
-        if fg_ratio is None:
-            # natural distribution
-            try:
+        tracks = []
+        # zipfile
+        if zipfile.is_zipfile(vid):
+            zf = zipfile.ZipFile(vid)
+            track_list = zf.namelist()
+            if fg_ratio is None:
+                # natural distribution
                 track_samples = sorted(random.sample(track_list, sample_per_vid))
-            except:
-                print len(track_list)
-                raise
+            else:
+                raise NotImplementedError('Track foreground ratio is not yet supported.')
+            for track_name in track_samples:
+                tracks.append(cPickle.loads(zf.read(track_name)))
+            zf.close()
+        # folders
+        elif osp.isdir(vid):
+            track_list = glob.glob(osp.join(vid, '*'))
+            if fg_ratio is None:
+                # natural distribution
+                track_samples = sorted(random.sample(track_list, sample_per_vid))
+            else:
+                raise NotImplementedError('Track foreground ratio is not yet supported.')
+            for track_name in track_samples:
+                tracks.append(cPickle.loads(open(track_name, 'rb').read()))
         else:
-            raise NotImplementedError('Track foreground ratio is not yet supported.')
-        for ind, track_name in enumerate(track_samples):
-            track = cPickle.loads(zf.read(track_name))
+            raise NotImplementedError('Only zipfile and directories are supported.')
+
+        # process track data
+        for ind, track in enumerate(tracks):
             for key in keys:
                 if key == 'bbox_target':
                     targets, weights = _expand_bbox_targets(track[key],
@@ -111,13 +128,13 @@ def tpn_iterator(raw_data, batch_size, num_steps, num_classes, num_vids, fg_rati
                     track_length = track[key].shape[0]
                     if key == 'class_label':
                         expend_res = -np.ones((num_steps,) + track[key].shape[1:])
-                    # elif key == 'end_label':
-                    #     expend_res = np.ones((num_steps,) + track[key].shape[1:])
+                    elif key == 'end_label':
+                        expend_res = np.ones((num_steps,) + track[key].shape[1:])
                     else:
                         expend_res = np.zeros((num_steps,) + track[key].shape[1:])
                     expend_res[:track_length] = track[key]
                     temp_res[key].append(expend_res)
-        zf.close()
+    # collect all results
     res = []
     for key in keys:
         res.append(np.stack(temp_res[key]))
