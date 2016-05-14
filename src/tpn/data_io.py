@@ -44,8 +44,10 @@ def tpn_raw_data(data_path):
         for ind, orig_vid in enumerate(orig_set, start=1):
             if zipfile.is_zipfile(orig_vid):
                 valid_set.append(orig_vid)
+            elif osp.isdir(orig_vid):
+                valid_set.append(orig_vid)
             else:
-                print "{} is not a valid zip file".format(orig_vid)
+                print "{} is not a valid zip file or a directory".format(orig_vid)
             if ind % 1000 == 0:
                 print "{} files checked.".format(ind)
         if ind % 1000 != 0:
@@ -81,45 +83,72 @@ def tpn_iterator(raw_data, batch_size, num_steps, num_classes, num_vids, fg_rati
     """
     keys = ['feature', 'class_label', 'end_label', 'bbox_target']
     temp_res = {}
-    for key in keys: temp_res[key] = []
-    temp_res['bbox_weights'] = []
+    for key in keys: temp_res[key] = None
+    temp_res['bbox_weights'] = None
     rand_vids = random.sample(raw_data, num_vids)
     assert batch_size % num_vids == 0
     sample_per_vid = batch_size / num_vids
 
-    for vid in rand_vids:
-        zf = zipfile.ZipFile(vid)
-        track_list = zf.namelist()
-        if fg_ratio is None:
-            # natural distribution
-            try:
+    for vid_ind, vid in enumerate(rand_vids):
+        tracks = []
+        # zipfile
+        if zipfile.is_zipfile(vid):
+            zf = zipfile.ZipFile(vid)
+            track_list = zf.namelist()
+            if fg_ratio is None:
+                # natural distribution
                 track_samples = sorted(random.sample(track_list, sample_per_vid))
-            except:
-                print len(track_list)
-                raise
+            else:
+                raise NotImplementedError('Track foreground ratio is not yet supported.')
+            for track_name in track_samples:
+                tracks.append(cPickle.loads(zf.read(track_name)))
+            zf.close()
+        # folders
+        elif osp.isdir(vid):
+            track_list = glob.glob(osp.join(vid, '*'))
+            if fg_ratio is None:
+                # natural distribution
+                track_samples = sorted(random.sample(track_list, sample_per_vid))
+            else:
+                raise NotImplementedError('Track foreground ratio is not yet supported.')
+            for track_name in track_samples:
+                tracks.append(cPickle.loads(open(track_name, 'rb').read()))
         else:
-            raise NotImplementedError('Track foreground ratio is not yet supported.')
-        for ind, track_name in enumerate(track_samples):
-            track = cPickle.loads(zf.read(track_name))
+            raise NotImplementedError('Only zipfile and directories are supported.')
+
+        # process track data
+        for ind, track in enumerate(tracks):
+            offset = vid_ind * sample_per_vid + ind
             for key in keys:
                 if key == 'bbox_target':
                     targets, weights = _expand_bbox_targets(track[key],
                         track['class_label'], num_classes, num_steps)
-                    temp_res[key].append(targets)
-                    temp_res['bbox_weights'].append(weights)
+                    if temp_res[key] is None:
+                        # initialize temp_res[key]
+                        temp_res[key] = np.zeros((batch_size,)+targets.shape,
+                            dtype=targets.dtype)
+                    temp_res[key][offset,...] = targets
+                    if temp_res['bbox_weights'] is None:
+                        temp_res['bbox_weights'] = np.zeros((batch_size,)+weights.shape,
+                            dtype=weights.dtype)
+                    temp_res['bbox_weights'][offset,...] = weights
                 else:
                     track_length = track[key].shape[0]
                     if key == 'class_label':
                         expend_res = -np.ones((num_steps,) + track[key].shape[1:])
-                    # elif key == 'end_label':
-                    #     expend_res = np.ones((num_steps,) + track[key].shape[1:])
+                    elif key == 'end_label':
+                        expend_res = np.ones((num_steps,) + track[key].shape[1:])
                     else:
                         expend_res = np.zeros((num_steps,) + track[key].shape[1:])
                     expend_res[:track_length] = track[key]
-                    temp_res[key].append(expend_res)
-        zf.close()
+                    if temp_res[key] is None:
+                        # initialize temp_res[key]
+                        temp_res[key] = np.zeros((batch_size,)+expend_res.shape,
+                            dtype=expend_res.dtype)
+                    temp_res[key][offset, ...] = expend_res
+    # collect all results
     res = []
     for key in keys:
-        res.append(np.stack(temp_res[key]))
-    res.append(np.stack(temp_res['bbox_weights']))
+        res.append(temp_res[key])
+    res.append(temp_res['bbox_weights'])
     return tuple(res)
