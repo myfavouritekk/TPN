@@ -65,8 +65,6 @@ class ResLSTMCell(RNNCell):
       num_units: int, The number of units in the LSTM cell.
       forget_bias: float, The bias added to forget gates (see above).
     """
-    if input_size is not None:
-      logging.warn("%s: The input_size parameter is deprecated." % self)
     self._num_units = num_units
     self._forget_bias = forget_bias
 
@@ -78,18 +76,23 @@ class ResLSTMCell(RNNCell):
   def output_size(self):
     return self._num_units
 
+  @property
+  def input_size(self):
+    return self._num_units
+
   def __call__(self, inputs, state, scope=None):
     """Long short-term memory cell (LSTM)."""
-    with vs.variable_scope(scope or type(self).__name__):  # "BasicLSTMCell"
+    with vs.variable_scope(scope or type(self).__name__):  # "ResLSTMCell"
       # Parameters of gates are concatenated into one multiply for efficiency.
       c, h = array_ops.split(1, 2, state)
-      concat = linear([inputs, h], 4 * self._num_units, True)
+      concat = linear([tf.nn.relu(inputs), h], 4 * self._num_units, True)
 
       # i = input_gate, j = new_input, f = forget_gate, o = output_gate
       i, j, f, o = array_ops.split(1, 4, concat)
 
-      new_c = c * sigmoid(f + self._forget_bias) + sigmoid(i) * tanh(j)
+      new_c = c * sigmoid(f + self._forget_bias) + sigmoid(i) * tf.nn.relu(j)
       # residual learning with identity mapping
-      new_h = tanh(new_c) * sigmoid(o) + h
+      new_h = inputs + new_c * sigmoid(o)
 
       return new_h, array_ops.concat(1, [new_c, new_h])
+
