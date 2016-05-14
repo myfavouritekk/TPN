@@ -83,13 +83,13 @@ def tpn_iterator(raw_data, batch_size, num_steps, num_classes, num_vids, fg_rati
     """
     keys = ['feature', 'class_label', 'end_label', 'bbox_target']
     temp_res = {}
-    for key in keys: temp_res[key] = []
-    temp_res['bbox_weights'] = []
+    for key in keys: temp_res[key] = None
+    temp_res['bbox_weights'] = None
     rand_vids = random.sample(raw_data, num_vids)
     assert batch_size % num_vids == 0
     sample_per_vid = batch_size / num_vids
 
-    for vid in rand_vids:
+    for vid_ind, vid in enumerate(rand_vids):
         tracks = []
         # zipfile
         if zipfile.is_zipfile(vid):
@@ -118,12 +118,20 @@ def tpn_iterator(raw_data, batch_size, num_steps, num_classes, num_vids, fg_rati
 
         # process track data
         for ind, track in enumerate(tracks):
+            offset = vid_ind * sample_per_vid + ind
             for key in keys:
                 if key == 'bbox_target':
                     targets, weights = _expand_bbox_targets(track[key],
                         track['class_label'], num_classes, num_steps)
-                    temp_res[key].append(targets)
-                    temp_res['bbox_weights'].append(weights)
+                    if temp_res[key] is None:
+                        # initialize temp_res[key]
+                        temp_res[key] = np.zeros((batch_size,)+targets.shape,
+                            dtype=targets.dtype)
+                    temp_res[key][offset,...] = targets
+                    if temp_res['bbox_weights'] is None:
+                        temp_res['bbox_weights'] = np.zeros((batch_size,)+weights.shape,
+                            dtype=weights.dtype)
+                    temp_res['bbox_weights'][offset,...] = weights
                 else:
                     track_length = track[key].shape[0]
                     if key == 'class_label':
@@ -133,10 +141,14 @@ def tpn_iterator(raw_data, batch_size, num_steps, num_classes, num_vids, fg_rati
                     else:
                         expend_res = np.zeros((num_steps,) + track[key].shape[1:])
                     expend_res[:track_length] = track[key]
-                    temp_res[key].append(expend_res)
+                    if temp_res[key] is None:
+                        # initialize temp_res[key]
+                        temp_res[key] = np.zeros((batch_size,)+expend_res.shape,
+                            dtype=expend_res.dtype)
+                    temp_res[key][offset, ...] = expend_res
     # collect all results
     res = []
     for key in keys:
-        res.append(np.stack(temp_res[key]))
-    res.append(np.stack(temp_res['bbox_weights']))
+        res.append(temp_res[key])
+    res.append(temp_res['bbox_weights'])
     return tuple(res)
