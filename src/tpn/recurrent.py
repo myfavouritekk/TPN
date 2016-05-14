@@ -232,6 +232,7 @@ def run_epoch(session, m, data, eval_op, verbose=False):
     x, cls_t, end_t, bbox_t, bbox_weights = tpn_iterator(data, m.batch_size, m.num_steps, m.num_classes, m.vid_per_batch)
     # import pdb
     # pdb.set_trace()
+    data_time = time.time()
     cost, cls_cost, bbox_cost, end_cost, state, _ = session.run(
         [m.cost, m.cls_cost, m.bbox_cost, m.end_cost, m.final_state, eval_op],
          {m.input_data: x,
@@ -250,10 +251,11 @@ def run_epoch(session, m, data, eval_op, verbose=False):
       cls_costs /= display_iter
       bbox_costs /= display_iter
       end_costs /= display_iter
-      print "Iter {:06d}: cost {:.03f} = cls_cost {:.03f} * {:.02f} + end_cost {:.03f} * {:.02f} + bbox_cost {:.03f} * {:.02f}".format(
-        step+1, costs, cls_costs, m.cls_weight,
-                      end_costs, m.ending_weight,
-                      bbox_costs, m.bbox_weight)
+      print "Iter {:06d} {:.03f} s/iter data time: {:.03f} s: cost {:.03f} = cls_cost {:.03f} * {:.02f} + end_cost {:.03f} * {:.02f} + bbox_cost {:.03f} * {:.02f}".format(
+        step+1, (time.time() - start_time) / display_iter,(data_time - start_time) / display_iter,
+        costs, cls_costs, m.cls_weight,
+        end_costs, m.ending_weight,
+        bbox_costs, m.bbox_weight)
       costs = 0.0
       cls_costs = 0.0
       bbox_costs = 0.0
@@ -274,6 +276,7 @@ def main(_):
   if not FLAGS.data_path:
     raise ValueError("Must set --data_path to TPN data directory")
 
+  print "Processing data..."
   raw_data = tpn_raw_data(FLAGS.data_path)
   train_data, valid_data = raw_data
 
