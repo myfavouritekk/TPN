@@ -85,15 +85,15 @@ class ResLSTMCell(RNNCell):
     with vs.variable_scope(scope or type(self).__name__):  # "ResLSTMCell"
       # Parameters of gates are concatenated into one multiply for efficiency.
       c, h = array_ops.split(1, 2, state)
-      concat = linear([tf.nn.tanh(inputs), h], 4 * self._num_units, True)
+      concat = linear([inputs, h], 4 * self._num_units, True)
 
       # i = input_gate, j = new_input, f = forget_gate, o = output_gate
       i, j, f, o = array_ops.split(1, 4, concat)
 
-      new_c = c * sigmoid(f + self._forget_bias) + sigmoid(i) * tf.nn.tanh(j)
+      new_c = c * sigmoid(f + self._forget_bias) + sigmoid(i) * tanh(j)
       new_h = tanh(new_c) * sigmoid(o)
       # residual learning with identity mapping
-      output = inputs + new_c * sigmoid(o)
+      output = tf.nn.relu(inputs + new_h)
 
       return output, array_ops.concat(1, [new_c, new_h])
 
