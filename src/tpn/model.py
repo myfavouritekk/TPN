@@ -63,6 +63,7 @@ class TPNModel(object):
       softmax_w = tf.get_variable("softmax_w", [size, num_classes])
       softmax_b = tf.get_variable("softmax_b", [num_classes], initializer=tf.constant_initializer(0.))
     logits = tf.matmul(output, softmax_w) + softmax_b
+    self._cls_scores = tf.nn.softmax(logits, name='cls_scores')
     # transpose cls_targets to make num_steps the leading axis
     cls_targets = tf.reshape(tf.transpose(self._cls_targets), [-1])
     loss_cls_score = tf.nn.sparse_softmax_cross_entropy_with_logits(logits, cls_targets, name='loss_cls_score')
@@ -78,7 +79,7 @@ class TPNModel(object):
     else:
       bbox_w = tf.get_variable("bbox_w", [size, num_classes * 4])
       bbox_b = tf.get_variable("bbox_b", [num_classes * 4])
-    bbox_pred = tf.matmul(output, bbox_w) + bbox_b
+    self._bbox_pred = bbox_pred = tf.matmul(output, bbox_w) + bbox_b
     # permute num_steps and batch_size
     bbox_targets = tf.reshape(tf.transpose(self._bbox_targets, (1, 0, 2)), [-1, 4 * num_classes])
     self._bbox_cost = bbox_cost = tf.nn.l2_loss(bbox_pred - bbox_targets) / batch_size / num_steps / 4.
@@ -89,6 +90,7 @@ class TPNModel(object):
     end_b = tf.get_variable("end_b", [1], initializer=tf.constant_initializer(0.))
     end_pred = tf.matmul(output, end_w) + end_b
     end_targets = tf.reshape(tf.transpose(self._end_targets), [-1, 1])
+    self._end_probs = tf.nn.sigmoid(end_pred, name='end_probs')
     loss_ending = tf.nn.sigmoid_cross_entropy_with_logits(end_pred, end_targets, name='loss_ending')
     self._end_cost = end_cost = tf.reduce_sum(loss_ending) / batch_size / num_steps
 
@@ -160,3 +162,13 @@ class TPNModel(object):
   @property
   def train_op(self):
     return self._train_op
+
+  @property
+  def cls_scores(self):
+    return self._cls_scores
+  @property
+  def bbox_pred(self):
+    return self._bbox_pred
+  @property
+  def end_probs(self):
+    return self._end_probs
