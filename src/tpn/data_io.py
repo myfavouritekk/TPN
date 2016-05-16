@@ -152,3 +152,30 @@ def tpn_iterator(raw_data, batch_size, num_steps, num_classes, num_vids, fg_rati
         res.append(temp_res[key])
     res.append(temp_res['bbox_weights'])
     return tuple(res)
+
+
+def tpn_test_iterator(track_path):
+    """ return values:
+            x: list of tracks
+    """
+    temp_res = None
+
+    tracks = []
+    # zipfile
+    if zipfile.is_zipfile(track_path):
+        zf = zipfile.ZipFile(track_path)
+        track_list = zf.namelist()
+        # print "Loading {} tracks...".format(len(track_list))
+        for track_name in track_list:
+            tracks.append(cPickle.loads(zf.read(track_name)))
+        zf.close()
+    # folders
+    elif osp.isdir(track_path):
+        track_list = sorted(glob.glob(osp.join(track_path, '*')))
+        # print "Loading {} tracks...".format(len(track_list))
+        for track_name in track_list:
+            tracks.append(cPickle.loads(open(track_name, 'rb').read()))
+    else:
+        raise NotImplementedError('Only zipfile and directories are supported.')
+
+    return tracks
