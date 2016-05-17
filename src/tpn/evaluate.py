@@ -11,6 +11,7 @@ import sys
 sys.path.insert(0, '/Volumes/Research/ImageNet2016/Code/external/kwang/py-faster-rcnn-craft/lib')
 from fast_rcnn.nms_wrapper import nms
 import cPickle
+from time import time
 
 def _frame_dets(tracks, frame_idx, score_key, box_key):
     scores = []
@@ -55,7 +56,7 @@ if __name__ == '__main__':
                  for _ in xrange(num_classes)]
 
     # process vid detections
-    vids = glob.glob(osp.join(args.track_dir, '*'))
+    vids = sorted(glob.glob(osp.join(args.track_dir, '*')))
     for vid_path in vids:
         print vid_path
         vid_name = osp.split(vid_path)[-1].split('.')[0]
@@ -67,6 +68,7 @@ if __name__ == '__main__':
 
             frame_idx = frame['frame']
             global_idx = int(image_list[frame_name]) - 1
+            start_time = time()
             scores, boxes = _frame_dets(tracks, frame_idx, args.score_key, args.box_key)
             boxes = boxes.reshape((boxes.shape[0], -1))
 
@@ -89,6 +91,8 @@ if __name__ == '__main__':
                     for j in xrange(1, num_classes):
                         keep = np.where(all_boxes[j][global_idx][:, -1] >= image_thresh)[0]
                         all_boxes[j][global_idx] = all_boxes[j][global_idx][keep, :]
+            end_time = time()
+            print "{}/{}: {:.03f} s".format(global_idx + 1, len(image_list), end_time - start_time)
 
     det_file = osp.join(args.output_dir, 'detections.pkl')
     if not osp.isdir(args.output_dir):
