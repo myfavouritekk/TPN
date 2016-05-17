@@ -33,6 +33,25 @@ def _frame_dets(tracks, frame_idx, score_key, box_key):
     boxes = np.concatenate(boxes, 0)
     return scores, boxes
 
+def _write_ilsvrc_results_file(all_boxes, f):
+    num_images = len(all_boxes[0])
+    num_classes = len(all_boxes)
+    for im_ind in xrange(num_images):
+        for cls_ind in xrange(num_classes):
+            if cls_ind == 0:
+                continue
+            dets = all_boxes[cls_ind][im_ind]
+            if dets == []:
+                continue
+            keep_inds = np.where(dets[:, -1]>=0.01)[0]
+            dets = dets[keep_inds, :]
+            # the VOCdevkit expects 1-based indices
+            for k in xrange(dets.shape[0]):
+                f.write('{:d} {:d} {:.3f} {:.1f} {:.1f} {:.1f} {:.1f}\n'.
+                        format(im_ind+1, cls_ind, dets[k, -1],
+                               dets[k, 0] + 1, dets[k, 1] + 1,
+                               dets[k, 2] + 1, dets[k, 3] + 1))
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('track_dir',
@@ -42,6 +61,8 @@ if __name__ == '__main__':
     parser.add_argument('score_key')
     parser.add_argument('box_key')
     parser.add_argument('output_dir')
+    parser.add_argument('--results', type=str, default='',
+        help='Result file.')
     parser.add_argument('--thresh', type=float, default=0.05)
     parser.add_argument('--num_classes', type=int, default=31)
     parser.add_argument('--max_per_image', type=int, default=100)
@@ -100,3 +121,6 @@ if __name__ == '__main__':
     with open(det_file, 'wb') as f:
         cPickle.dump(all_boxes, f, cPickle.HIGHEST_PROTOCOL)
 
+    if args.results:
+        with open(args.results, 'w') as f:
+            _write_ilsvrc_results_file(all_boxes, f)
