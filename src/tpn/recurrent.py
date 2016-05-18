@@ -25,6 +25,7 @@ flags.DEFINE_string("data_path", None, "data_path")
 flags.DEFINE_string("log_path", '.', "log_path")
 flags.DEFINE_string("save_path", '.', "save_path")
 flags.DEFINE_integer("num_layers", 1, "number of LSTM layers")
+flags.DEFINE_integer("type", "residual", "type of LSTM cells {residual, basic}. [residual]")
 
 FLAGS = flags.FLAGS
 
@@ -50,11 +51,12 @@ class DefaultConfig(object):
   batch_size = 128
   num_classes = 31
   cls_weight = 1.0
-  bbox_weight = 0.0
+  bbox_weight = 1.0
   ending_weight = 1.0
   vid_per_batch = 4
   cls_init = 'cls_score_vid_params.pkl'
   bbox_init = 'bbox_pred_vid_params.pkl'
+  type = FLAGS.type
 
 
 class TestConfig(object):
