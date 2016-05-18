@@ -52,7 +52,7 @@ def test_vid(session, m, vid_file, verbose=True):
   # pdb.set_trace()
   cum_acc_static = 0.
   cum_acc_lstm = 0.
-  print vid_file
+  log.info(vid_file)
   vid_res = []
   for ind, track in enumerate(tracks, start=1):
     # process track data
@@ -89,7 +89,7 @@ def test_vid(session, m, vid_file, verbose=True):
     vid_res.append(track_res)
   cum_acc_lstm /= len(tracks)
   cum_acc_static /= len(tracks)
-  print "Accuracy (Static): {:.03f} Accuracy (LSTM): {:.03f}".format(cum_acc_static, cum_acc_lstm)
+  log.info("Accuracy (Static): {:.03f} Accuracy (LSTM): {:.03f}".format(cum_acc_static, cum_acc_lstm))
   return vid_res
 
 class TestConfig(object):
@@ -124,6 +124,7 @@ def main(args):
 
   config = TestConfig()
   config.num_layers = args.num_layers
+  config.type = args.type
 
   #tf.set_random_seed(1017)
   vids = glob.glob(osp.join(args.data_path, '*'))
@@ -135,7 +136,7 @@ def main(args):
 
     # restoring variables
     saver = tf.train.Saver()
-    print "Retoring from {}".format(args.model_path)
+    log.info("Retoring from {}".format(args.model_path))
     saver.restore(session, args.model_path)
     for vid_file in vids:
       vid_name = osp.split(vid_file)[-1]
@@ -157,6 +158,8 @@ if __name__ == '__main__':
   parser.add_argument('model_path', help='model_stored path')
   parser.add_argument('num_layers', type=int,
       help='Number of layers')
+  parser.add_argument('--type', type=str, choices=['residual', 'basic'], default='residual',
+      help='Type of LSTM cells. [residual]')
   args = parser.parse_args()
 
   main(args)
