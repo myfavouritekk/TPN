@@ -4,6 +4,8 @@ import numpy as np
 import tensorflow as tf
 from tensorflow.models.rnn import rnn
 from rnn_cells import TPNLSTMCell, ResLSTMCell
+import glog as log
+import cPickle
 
 class TPNModel(object):
   """The TPN model."""
@@ -37,7 +39,13 @@ class TPNModel(object):
               for input_ in tf.split(1, num_steps, inputs)]
 
 
-    lstm_cell = ResLSTMCell(size)
+    self.type = config.type
+    if self.type == 'residual':
+      lstm_cell = ResLSTMCell(size)
+    elif self.type == 'basic':
+      lstm_cell = tf.models.rnn.rnn_cell.BasicLSTMCell(size)
+    else:
+      raise ValueError('Unknown LSTM cell type: {}.'.format(self.type))
     if is_training and config.keep_prob < 1:
       lstm_cell = tf.nn.rnn_cell.DropoutWrapper(
           lstm_cell, output_keep_prob=config.keep_prob)
