@@ -110,9 +110,6 @@ if __name__ == '__main__':
             frame_idx = int(frame_idx) # 0-based
             need_propagate = (frame_idx % args.sample_rate == 0)
 
-            if global_idx == 2000:
-                break
-
             if (global_idx + 1) % 1000 == 0:
                 end_time = time.time()
                 print "{} frames processed: {} s".format(global_idx + 1, end_time - start_time)
