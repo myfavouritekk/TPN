@@ -25,7 +25,7 @@ flags.DEFINE_string("data_path", None, "data_path")
 flags.DEFINE_string("log_path", '.', "log_path")
 flags.DEFINE_string("save_path", '.', "save_path")
 flags.DEFINE_integer("num_layers", 1, "number of LSTM layers")
-flags.DEFINE_integer("type", "residual", "type of LSTM cells {residual, basic}. [residual]")
+flags.DEFINE_string("type", "residual,basic", "type of LSTM cells {residual, basic}. [residual]")
 
 FLAGS = flags.FLAGS
 
@@ -165,7 +165,7 @@ def main(_):
       train_cost, state = run_epoch(session, m, train_data, m.train_op,
                              state, i, verbose=True)
       log.info("Epoch: %d Train Cost: %.3f" % (i + 1, train_cost))
-      save_path = osp.join(FLAGS.save_path, 'ResLSTM_{}'.format(FLAGS.num_layers))
+      save_path = osp.join(FLAGS.save_path, '{}LSTM_{}'.format(FLAGS.type, FLAGS.num_layers))
       log.info("Save to {}_{}".format(save_path, (i+1)*m.iter_epoch))
       saver.save(session, save_path, global_step=(i+1) * m.iter_epoch)
 
