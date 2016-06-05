@@ -138,6 +138,7 @@ if __name__ == '__main__':
 
             for offset in xrange(0, args.window+1):
                 neighbor_idx = global_idx + offset
+                if neighbor_idx >= len(image_list): break
                 neighbor_frame_name = image_list[neighbor_idx]
                 neighbor_vid_name = neighbor_frame_name.split('/')[0]
                 if neighbor_vid_name != vid_name: break
