@@ -62,11 +62,11 @@ def naive_box_regression(net_rpn, net_no_rpn, vid_proto,
     return track_proto
 
 
-def _box_proto_to_track(box_proto, max_frame, length, sample_rate):
+def _box_proto_to_track(box_proto, max_frame, length, sample_rate, offset=0):
     # generate empty tracks according to box proto
     tracks = []
     for box in box_proto['boxes']:
-        if (box['frame'] - 1) % sample_rate != 0: continue
+        if (box['frame'] - 1) % sample_rate != offset: continue
         track = []
         for i in xrange(length):
             if box['frame'] + i > max_frame: break
@@ -154,13 +154,14 @@ def _update_track(tracks, pred_boxes, scores, features, track_index, frame_id):
 """
 
 def roi_propagation(vid_proto, box_proto, net, det_fun=im_detect, scheme='max', length=None,
-        sample_rate=1, cls_indices=None, keep_feat=False):
+        sample_rate=1, offset=0, cls_indices=None, keep_feat=False):
     track_proto = {}
     track_proto['video'] = vid_proto['video']
     track_proto['method'] = 'roi_propagation'
     max_frame = vid_proto['frames'][-1]['frame']
     if not length: length = max_frame
-    tracks = _box_proto_to_track(box_proto, max_frame, length, sample_rate)
+    tracks = _box_proto_to_track(box_proto, max_frame, length, sample_rate,
+                offset)
 
     for idx, frame in enumerate(vid_proto['frames'], start=1):
         # Load the demo image
