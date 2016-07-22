@@ -6,6 +6,7 @@ import argparse
 import numpy as np
 import glob
 import cPickle
+import zipfile
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -16,13 +17,21 @@ if __name__ == '__main__':
 
     vid_proto = proto_load(args.vid_file)
     annot_proto = proto_load(args.annot_file)
-    track_files = glob.glob(args.track_dir + "/*.pkl")
     tracks = []
     frames = []
-    for track_file in track_files:
-        track = cPickle.loads(open(track_file, 'rb').read())
-        tracks.append(track['bbox'])
-        frames.append(track['frame'])
+    if zipfile.is_zipfile(args.track_dir):
+        zf = zipfile.ZipFile(args.track_dir)
+        track_files = zf.namelist()
+        for track_file in track_files:
+            track = cPickle.loads(zf.read(track_file))
+            tracks.append(track['bbox'])
+            frames.append(track['frame'])
+    else:
+        track_files = glob.glob(args.track_dir + "/*.pkl")
+        for track_file in track_files:
+            track = cPickle.loads(open(track_file, 'rb').read())
+            tracks.append(track['bbox'])
+            frames.append(track['frame'])
 
     gt_count = 0
     recall_count = 0
