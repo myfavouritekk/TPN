@@ -4,3 +4,6 @@
 [submodule "external/vdetlib"]
 	path = external/vdetlib
 	url = git@github.com:myfavouritekk/vdetlib.git
+[submodule "external/caffe-mpi"]
+	path = external/caffe-mpi
+	url = https://github.com/yjxiong/caffe.git
