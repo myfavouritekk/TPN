@@ -1,6 +1,6 @@
 [submodule "external/py-faster-rcnn"]
 	path = external/py-faster-rcnn
-	url = https://github.com/rbgirshick/py-faster-rcnn.git
+	url = https://github.com/myfavouritekk/py-faster-rcnn.git
 [submodule "external/vdetlib"]
 	path = external/vdetlib
 	url = git@github.com:myfavouritekk/vdetlib.git
