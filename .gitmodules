@@ -1,9 +1,13 @@
 [submodule "external/py-faster-rcnn"]
 	path = external/py-faster-rcnn
 	url = https://github.com/myfavouritekk/py-faster-rcnn.git
+  ignore = dirty
 [submodule "external/vdetlib"]
 	path = external/vdetlib
 	url = git@github.com:myfavouritekk/vdetlib.git
+  ignore = dirty
 [submodule "external/caffe-mpi"]
 	path = external/caffe-mpi
 	url = https://github.com/myfavouritekk/caffe.git
+  ignore = dirty
+
