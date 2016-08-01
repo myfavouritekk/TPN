@@ -185,7 +185,7 @@ def roi_propagation(vid_proto, box_proto, net, det_fun=im_detect, scheme='max', 
         batch_size = 1024
         for roi_batch in np.split(np.asarray(rois), range(0, len(rois), batch_size)[1:]):
             s_batch, b_batch = det_fun(net, im, np.asarray(roi_batch))
-            f_batch = net.blobs['global_pool'].data.copy().squeeze()
+            f_batch = net.blobs['global_pool'].data.copy().squeeze(axis=(2,3))
             scores.append(s_batch)
             boxes.append(b_batch)
             features.append(f_batch)
