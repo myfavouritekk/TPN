@@ -1,13 +1,13 @@
 #!/usr/bin/env python
 
 import sys
-sys.path.insert(0, '/Volumes/Research/ImageNet2016/Code/external/kwang/py-faster-rcnn-craft/caffe-fast-rcnn/python/')
 sys.path.insert(0, 'src')
 sys.path.insert(0, 'external/py-faster-rcnn/lib')
 sys.path.insert(0, 'external')
+sys.path.insert(0, 'external/caffe-mpi/build/install/python')
 import caffe
 import tensorflow as tf
-from fast_rcnn.config import cfg
+from fast_rcnn.config import cfg, cfg_from_file
 from fast_rcnn.test import im_detect
 import argparse
 from tpn.recurrent_extract_features import TestConfig
@@ -90,8 +90,11 @@ def load_models(args):
 if __name__ == '__main__':
     args = parse_args()
 
+    if args.cfg_file is not None:
+        cfg_from_file(args.cfg_file)
+    cfg.DEDUP_BOXES = 0.0
+
     # Load models
-    cfg.DEDUP_BOXES = 0
     feature_net, rnn_net, session = load_models(args)
 
     # Load protocols
@@ -102,6 +105,6 @@ if __name__ == '__main__':
     track_proto = tpn_test(vid_proto, box_proto, feature_net, rnn_net,
         session, im_detect, scheme=args.scheme,
         length=args.length, sample_rate=args.sample_rate,
-        offset=args.offset)
+        offset=args.offset, batch_size=args.boxes_num_per_batch)
 
     proto_dump(track_proto, args.save_file)

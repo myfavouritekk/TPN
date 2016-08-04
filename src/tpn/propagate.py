@@ -231,7 +231,7 @@ def roi_propagation(vid_proto, box_proto, net, det_fun=im_detect, scheme='max', 
 
 
 def tpn_test(vid_proto, box_proto, net, rnn_net, session, det_fun=im_detect, scheme='max', length=None,
-        sample_rate=1, offset=0, cls_indices=None):
+        sample_rate=1, offset=0, cls_indices=None, batch_size=64):
     track_proto = {}
     track_proto['video'] = vid_proto['video']
     track_proto['method'] = 'roi_propagation'
@@ -259,13 +259,15 @@ def tpn_test(vid_proto, box_proto, net, rnn_net, session, det_fun=im_detect, sch
         boxes = []
         features = []
         # split to several batches to avoid memory error
-        batch_size = 32
         for roi_batch in np.split(np.asarray(rois), range(0, len(rois), batch_size)[1:]):
-            s_batch, b_batch = det_fun(net, im, np.asarray(roi_batch))
+            num_rois = roi_batch.shape[0]
+            roi_holder = np.zeros((batch_size, 4), dtype=np.float32)
+            roi_holder[:num_rois,:] = np.asarray(roi_batch)
+            s_batch, b_batch = det_fun(net, im, roi_holder)
             f_batch = net.blobs['global_pool'].data.copy().squeeze(axis=(2,3))
-            scores.append(s_batch)
-            boxes.append(b_batch)
-            features.append(f_batch)
+            scores.append(s_batch[:num_rois,...])
+            boxes.append(b_batch[:num_rois,...])
+            features.append(f_batch[:num_rois,...])
         scores = np.concatenate(scores, axis=0)
         boxes = np.concatenate(boxes, axis=0)
         boxes = boxes.reshape((boxes.shape[0], -1, 4))
