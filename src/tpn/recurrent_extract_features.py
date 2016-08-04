@@ -125,6 +125,7 @@ def main(args):
   config = TestConfig()
   config.num_layers = args.num_layers
   config.type = args.type
+  config.hidden_size = config.input_size = args.input_size
 
   #tf.set_random_seed(1017)
   vids = glob.glob(osp.join(args.data_path, '*'))
@@ -158,6 +159,8 @@ if __name__ == '__main__':
   parser.add_argument('model_path', help='model_stored path')
   parser.add_argument('num_layers', type=int,
       help='Number of layers')
+  parser.add_argument('input_size', type=int,
+      help='Input size.')
   parser.add_argument('--type', type=str, choices=['residual', 'basic'], default='residual',
       help='Type of LSTM cells. [residual]')
   args = parser.parse_args()
