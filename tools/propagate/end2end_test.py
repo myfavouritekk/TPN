@@ -32,14 +32,16 @@ def parse_args():
         help='Type of LSTM cells. [basic]')
     parser.add_argument('--lstm_num', type=int, default=1,
         help='Number of LSTM layer(s). [1]')
+    parser.add_argument('--lstm_input_size', type=int, default=1024,
+        help='Input feature size of LSTM. [1024]')
     parser.add_argument('--num_dets', dest='max_per_image',
                         help='max number of detections per image',
                         default=100, type=int)
     parser.add_argument('--num_per_batch', dest='boxes_num_per_batch',
                         help='split boxes to batches',
-                        default=0, type=int)
+                        default=64, type=int)
     parser.add_argument('--bbox_mean', dest='bbox_mean',
-                        help='the mean of bbox',
+                        help='the    mean of bbox',
                         default=None, type=str)
     parser.add_argument('--bbox_std', dest='bbox_std',
                         help='the std of bbox',
@@ -61,6 +63,7 @@ def load_models(args):
     config = TestConfig()
     config.num_layers = args.lstm_num
     config.type = args.lstm_type
+    config.hidden_size = config.input_size = args.lstm_input_size
 
     #tf.set_random_seed(1017)
     sess_config = tf.ConfigProto()
@@ -71,13 +74,15 @@ def load_models(args):
                                                     config.init_scale)
         with tf.variable_scope("model", reuse=None, initializer=None):
             # with tf.device("/gpu:{}".format(args.job_id)):
-            with tf.device("/cpu"):
+            with tf.device("/cpu:0"):
+                print "Constructing RNN network..."
                 rnn_net = TPNModel(is_training=False, config=config)
 
         # restoring variables
         saver = tf.train.Saver()
-        print 'Loaded RNN network from {:s}.'.format(args.lstm_path)
+        print "Starting loading session..."
         saver.restore(session, args.lstm_path)
+        print 'Loaded RNN network from {:s}.'.format(args.lstm_path)
 
     # load feature model
     caffe.set_mode_gpu()

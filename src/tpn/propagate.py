@@ -253,7 +253,6 @@ def tpn_test(vid_proto, box_proto, net, rnn_net, session, det_fun=im_detect, sch
         timer = Timer()
         timer.tic()
 
-
         # scores: n x c, boxes: n x (c x 4)
         scores = []
         boxes = []
@@ -320,12 +319,13 @@ def tpn_test(vid_proto, box_proto, net, rnn_net, session, det_fun=im_detect, sch
         # process outputs
         rois = np.asarray([box['roi'] for box in track])
         bbox_pred = bbox_transform_inv(rois, bbox_deltas[:track_length,:])
-        cls_pred_lstm = np.argmax(cls_scores, axis=1)[:track_length]
+        cls_pred_lstm = cls_scores[:track_length]
         end_probs = end_probs[:track_length]
         for box, cur_bbox_pred, cur_cls_pred_lstm, cur_end_prob in \
             zip(track, bbox_pred, cls_pred_lstm, end_probs):
             box['scores_lstm'] = cur_cls_pred_lstm.tolist()
             box['bbox_lstm'] = cur_bbox_pred.tolist()
             box['end_prob'] = float(cur_end_prob)
+            del box['feature']
     track_proto['tracks'] = tracks
     return track_proto
