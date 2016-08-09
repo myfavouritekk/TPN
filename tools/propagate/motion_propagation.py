@@ -47,7 +47,7 @@ def _boxes_average_sum(motionmap, boxes, box_ratio=1.0):
     row1[row_out_idx] = 0
 
     sum_values = accum_map[row2.astype('int'), col2.astype('int')]
-    col_values = accum_map[row1.astype('int'), col1.astype('int')]
+    col_values = accum_map[row2.astype('int'), col1.astype('int')]
     row_values = accum_map[row1.astype('int'), col2.astype('int')]
     corner_values = accum_map[row1.astype('int'), col1.astype('int')]
 
@@ -115,11 +115,11 @@ if __name__ == '__main__':
         num_boxes = det['boxes'].shape[0]
         boxes = det['boxes'].reshape((-1, 4))
         box_avg_x = _boxes_average_sum(x_map, boxes)
-        box_avg_x = box_avg_x.reshape((num_boxes, -1, 1))
+        box_avg_x = box_avg_x.reshape((num_boxes, 1))
         box_avg_y = _boxes_average_sum(y_map, boxes)
-        box_avg_y = box_avg_y.reshape((num_boxes, -1, 1))
+        box_avg_y = box_avg_y.reshape((num_boxes, 1))
         motion_shift = np.concatenate(
-            (box_avg_x, box_avg_y, box_avg_x, box_avg_y), axis=2)
+            (box_avg_x, box_avg_y, box_avg_x, box_avg_y), axis=1)
 
         # motion propagation
         for offset in range(-half_tws, half_tws+1):
