@@ -36,10 +36,10 @@ if __name__ == '__main__':
     caffe.set_mode_gpu()
     caffe.set_device(args.gpu)
     net = caffe.Net(args.model, args.weights, caffe.TEST)
+    size = args.size
+    num_roi = args.num_roi
     for i in xrange(args.iterations):
         st = time.time()
-        size = args.size
-        num_roi = args.num_roi
         net.blobs['data'].reshape(1, 3, size, size)
         net.blobs['rois'].reshape(num_roi, 5)
         net.forward()
