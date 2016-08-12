@@ -184,18 +184,25 @@ def roi_propagation(vid_proto, box_proto, net, det_fun=im_detect, scheme='max', 
         boxes = []
         features = []
         # split to several batches to avoid memory error
-        for roi_batch in np.split(np.asarray(rois), range(0, len(rois), batch_size)[1:]):
-            s_batch, b_batch = det_fun(net, im, np.asarray(roi_batch))
+        rois = np.asarray(rois)
+        num_rois = len(rois)
+        num_batches = int(np.ceil(float(num_rois) / batch_size))
+        for it in xrange(num_batches):
+            roi_batch = np.zeros((batch_size, 4), dtype=np.float32)
+            st = it * batch_size
+            ed = np.minimum((it+1)*batch_size, num_rois)
+            roi_batch[0:ed-st,:] = rois[st:ed,:]
+            s_batch, b_batch = det_fun(net, im, roi_batch)
             f_batch = net.blobs['global_pool'].data.copy().squeeze(axis=(2,3))
             # must copy() because of batches may overwrite each other
             scores.append(s_batch.copy())
             boxes.append(b_batch.copy())
             features.append(f_batch)
-        scores = np.concatenate(scores, axis=0)
-        boxes = np.concatenate(boxes, axis=0)
-        boxes = boxes.reshape((boxes.shape[0], -1, 4))
+        scores = np.concatenate(scores, axis=0)[:num_rois]
+        boxes = np.concatenate(boxes, axis=0)[:num_rois]
+        boxes = boxes.reshape((boxes.shape[0], -1, 4))[:num_rois]
         if keep_feat:
-            features = np.concatenate(features, axis=0)
+            features = np.concatenate(features, axis=0)[:num_rois]
             assert features.shape[0] == scores.shape[0]
         else:
             features = None
