@@ -14,69 +14,19 @@ import os
 import os.path as osp
 import glog as log
 from model import TPNModel
+import yaml
+from easydict import EasyDict as edict
 
 flags = tf.flags
 logging = tf.logging
 
-flags.DEFINE_string(
-    "model", "default",
-    "A type of model.")
 flags.DEFINE_string("data_path", None, "data_path")
-flags.DEFINE_string("log_path", '.', "log_path")
 flags.DEFINE_string("save_path", '.', "save_path")
-flags.DEFINE_string("cls_init", '', "Classification param init pickle.")
-flags.DEFINE_string("bbox_init", '', "Bounding box regression param init pickle.")
-flags.DEFINE_integer("num_layers", 1, "number of LSTM layers")
-flags.DEFINE_integer("input_size", 1024, "Number of input neurons. [1024]")
-flags.DEFINE_string("type", "residual,basic", "type of LSTM cells {residual, basic}. [residual]")
-
+flags.DEFINE_string("config", '.', "RNN config file.")
 FLAGS = flags.FLAGS
 
 if not osp.isdir(FLAGS.save_path):
   os.makedirs(FLAGS.save_path)
-
-
-
-class DefaultConfig(object):
-  """Default config."""
-  init_scale = 0.01
-  learning_rate = 0.001
-  momentum = 0.9
-  max_grad_norm = 1.5
-  num_layers = FLAGS.num_layers
-  num_steps = 20
-  input_size = FLAGS.input_size
-  hidden_size = FLAGS.input_size
-  max_epoch = 10
-  iter_epoch = 2000
-  keep_prob = 1.0
-  lr_decay = 0.5
-  batch_size = 128
-  num_classes = 31
-  cls_weight = 1.0
-  bbox_weight = 0.0
-  ending_weight = 1.0
-  vid_per_batch = 4
-  cls_init = FLAGS.cls_init
-  bbox_init = FLAGS.bbox_init
-  type = FLAGS.type
-
-
-class TestConfig(object):
-  """Tiny config, for testing."""
-  init_scale = 0.1
-  learning_rate = 1.0
-  max_grad_norm = 1
-  num_layers = 1
-  num_steps = 2
-  hidden_size = 2
-  max_epoch = 1
-  max_max_epoch = 1
-  keep_prob = 1.0
-  lr_decay = 0.5
-  batch_size = 20
-  vocab_size = 10000
-
 
 def run_epoch(session, m, data, eval_op, init_state, epoch_idx, verbose=False):
   """Runs the model on the given data."""
@@ -126,25 +76,26 @@ def run_epoch(session, m, data, eval_op, init_state, epoch_idx, verbose=False):
   return tot_costs / m.iter_epoch, state
 
 
-def get_config():
-  if FLAGS.model == "default":
-    return DefaultConfig()
-  else:
-    raise ValueError("Invalid model: %s", FLAGS.model)
-
+def get_config(phase):
+  config = {}
+  raw_config = yaml.load(open(FLAGS.config).read())
+  for section in ['init', 'model', phase]:
+    assert section in raw_config
+    for key in raw_config[section].keys():
+      config[key] = raw_config[section][key]
+  return edict(config)
 
 def main(_):
   if not FLAGS.data_path:
     raise ValueError("Must set --data_path to TPN data directory")
 
+  log.info("Loading config file {}.".format(FLAGS.config))
+  config = get_config('train')
+  eval_config = get_config('test')
+
   log.info("Processing data...")
   raw_data = tpn_raw_data(FLAGS.data_path)
   train_data, valid_data = raw_data
-
-  config = get_config()
-  eval_config = get_config()
-  eval_config.batch_size = 1
-  eval_config.num_steps = 1
 
   #tf.set_random_seed(1017)
   with tf.Graph().as_default(), tf.Session() as session:
@@ -161,14 +112,15 @@ def main(_):
     for i in range(config.max_epoch):
       lr_decay = config.lr_decay ** i
       m.assign_lr(session, config.learning_rate * lr_decay)
-      
+
       if i == 0:
         state = m.initial_state.eval()
       log.info("Epoch: {} Learning rate {:.03e}.".format(i+1,session.run(m.lr)))
       train_cost, state = run_epoch(session, m, train_data, m.train_op,
                              state, i, verbose=True)
       log.info("Epoch: %d Train Cost: %.3f" % (i + 1, train_cost))
-      save_path = osp.join(FLAGS.save_path, '{}LSTM_{}'.format(FLAGS.type, FLAGS.num_layers))
+      save_path = osp.join(FLAGS.save_path, '{}LSTM_{}'.format(
+          config.type, config.num_layers))
       log.info("Save to {}_{}".format(save_path, (i+1)*m.iter_epoch))
       saver.save(session, save_path, global_step=(i+1) * m.iter_epoch)
 
