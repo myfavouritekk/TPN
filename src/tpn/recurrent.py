@@ -112,14 +112,15 @@ def main(_):
     for i in range(config.max_epoch):
       lr_decay = config.lr_decay ** i
       m.assign_lr(session, config.learning_rate * lr_decay)
-      
+
       if i == 0:
         state = m.initial_state.eval()
       log.info("Epoch: {} Learning rate {:.03e}.".format(i+1,session.run(m.lr)))
       train_cost, state = run_epoch(session, m, train_data, m.train_op,
                              state, i, verbose=True)
       log.info("Epoch: %d Train Cost: %.3f" % (i + 1, train_cost))
-      save_path = osp.join(FLAGS.save_path, '{}LSTM_{}'.format(FLAGS.type, FLAGS.num_layers))
+      save_path = osp.join(FLAGS.save_path, '{}LSTM_{}'.format(
+          config.type, config.num_layers))
       log.info("Save to {}_{}".format(save_path, (i+1)*m.iter_epoch))
       saver.save(session, save_path, global_step=(i+1) * m.iter_epoch)
 

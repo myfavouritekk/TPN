@@ -11,3 +11,6 @@
 	url = https://github.com/myfavouritekk/caffe.git
   ignore = dirty
 
+[submodule "external/caffe-official"]
+	path = external/caffe-official
+	url = https://github.com/myfavouritekk/caffe
