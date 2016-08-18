@@ -3,10 +3,11 @@ import numpy as np
 from utils.cython_bbox import bbox_overlaps
 from fast_rcnn.bbox_transform import bbox_transform
 
-def add_track_targets(track_proto, annot_proto):
+def add_track_targets(track_proto, annot_proto, verbose=True):
 
     # process annot_proto
-    print "Process annotation file for {}.".format(annot_proto['video'])
+    if verbose:
+        print "Process annotation file for {}.".format(annot_proto['video'])
     processed_annot = {}
     num_gt = len(annot_proto['annotations'])
     max_gt_frame = max([int(annot['track'][-1]['frame']) for annot in annot_proto['annotations']])
@@ -26,7 +27,8 @@ def add_track_targets(track_proto, annot_proto):
             processed_annot['occluded'][track_id, frame_index] = box['occluded']
 
     # add track targets
-    print "Adding tracking targets..."
+    if verbose:
+        print "Adding tracking targets..."
     for track in track_proto['tracks']:
         target_obj = -1 # uncertain target
         class_label = -1
