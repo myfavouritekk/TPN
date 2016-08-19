@@ -56,8 +56,14 @@ if __name__ == '__main__':
     parser.add_argument('--bbox_std', dest='bbox_std',
                         help='the std of bbox',
                         default=None, type=str)
+    restore = parser.add_mutually_exclusive_group()
+    restore.add_argument('--weights', type=str, default=None,
+        help='RNN trained models.')
+    restore.add_argument('--snapshot', type=str, default=None,
+        help='RNN solverstates.')
     parser.set_defaults(debug=False)
     args = parser.parse_args()
+
     comm = MPI.COMM_WORLD
     mpi_rank = comm.Get_rank()
     pool_size = comm.Get_size()
@@ -125,7 +131,12 @@ if __name__ == '__main__':
     caffe.set_mode_gpu()
     caffe.set_device(cur_gpu)
     solver = caffe.SGDSolver(args.solver)
+    if args.snapshot:
+        print "Restoring history from {}".format(args.snapshot)
+        solver.restore(args.snapshot)
     rnn = solver.net
+    if args.weights:
+        rnn.copy_from(args.weights)
     feature_net = caffe.Net(args.feature_net, args.feature_param, caffe.TEST)
 
     # apply bbox regression normalization on the net weights
