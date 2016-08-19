@@ -23,10 +23,11 @@ import numpy as np
 import cPickle
 import random
 
-def vid_valid(vid_name, vid_dir, box_dir, annot_dir):
+def vid_valid(vid_name, vid_dir, box_dir, annot_dir, blacklist=[]):
     return osp.isfile(osp.join(vid_dir, vid_name + ".vid")) and \
         osp.isfile(osp.join(box_dir, vid_name + ".box")) and \
-        osp.isfile(osp.join(annot_dir, vid_name + ".annot"))
+        osp.isfile(osp.join(annot_dir, vid_name + ".annot")) and \
+        vid_name not in blacklist
 
 def expend_bbox_targets(bbox_targets, class_label, num_classes=31):
     bbox_targets = np.asarray(bbox_targets)
@@ -68,12 +69,18 @@ if __name__ == '__main__':
     with open(args.train_cfg) as f:
         config = yaml.load(f.read())
     print "Config:\n{}".format(config)
+    if config['blacklist']:
+        with open(config['blacklist']) as f:
+            blacklist = [line.strip() for line in f]
+    else:
+        blacklist = []
 
     # preprocess data
     with open(config['vid_list']) as f:
         vid_names = [line.strip().split('/')[-1] for line in f]
     vid_names = [vid_name for vid_name in vid_names if \
-        vid_valid(vid_name, config['vid_dir'], config['box_dir'], config['annot_dir'])]
+        vid_valid(vid_name, config['vid_dir'], config['box_dir'], config['annot_dir'],
+                  blacklist)]
 
     random.shuffle(vid_names)
 
