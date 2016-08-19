@@ -23,26 +23,7 @@ import numpy as np
 import cPickle
 import random
 
-def vid_valid(vid_name, vid_dir, box_dir, annot_dir, blacklist=[]):
-    return osp.isfile(osp.join(vid_dir, vid_name + ".vid")) and \
-        osp.isfile(osp.join(box_dir, vid_name + ".box")) and \
-        osp.isfile(osp.join(annot_dir, vid_name + ".annot")) and \
-        vid_name not in blacklist
-
-def expend_bbox_targets(bbox_targets, class_label, num_classes=31):
-    bbox_targets = np.asarray(bbox_targets)
-    assert bbox_targets.shape == (1,4)
-    expend_targets = np.zeros((num_classes, 4))
-    expend_targets[class_label,:] = bbox_targets
-    return expend_targets.reshape((1,-1))
-
-def expend_bbox_weights(class_label, num_classes=31):
-    expend_weights = np.zeros((num_classes, 4))
-    if class_label != 0:
-        expend_weights[class_label,:] = 1.
-    return expend_weights.reshape((1,-1))
-
-if __name__ == '__main__':
+def parse_args():
     parser = argparse.ArgumentParser('TPN training.')
     parser.add_argument('solver')
     parser.add_argument('feature_net')
@@ -63,18 +44,28 @@ if __name__ == '__main__':
         help='RNN solverstates.')
     parser.set_defaults(debug=False)
     args = parser.parse_args()
+    return args
 
-    comm = MPI.COMM_WORLD
-    mpi_rank = comm.Get_rank()
-    pool_size = comm.Get_size()
+def vid_valid(vid_name, vid_dir, box_dir, annot_dir, blacklist=[]):
+    return osp.isfile(osp.join(vid_dir, vid_name + ".vid")) and \
+        osp.isfile(osp.join(box_dir, vid_name + ".box")) and \
+        osp.isfile(osp.join(annot_dir, vid_name + ".annot")) and \
+        vid_name not in blacklist
 
-    if args.rcnn_cfg is not None:
-        cfg_from_file(args.rcnn_cfg)
+def expend_bbox_targets(bbox_targets, class_label, num_classes=31):
+    bbox_targets = np.asarray(bbox_targets)
+    assert bbox_targets.shape == (1,4)
+    expend_targets = np.zeros((num_classes, 4))
+    expend_targets[class_label,:] = bbox_targets
+    return expend_targets.reshape((1,-1))
 
-    # load config file
-    with open(args.train_cfg) as f:
-        config = yaml.load(f.read())
-    print "Config:\n{}".format(config)
+def expend_bbox_weights(class_label, num_classes=31):
+    expend_weights = np.zeros((num_classes, 4))
+    if class_label != 0:
+        expend_weights[class_label,:] = 1.
+    return expend_weights.reshape((1,-1))
+
+def load_data(config, debug=False):
     if config['blacklist']:
         with open(config['blacklist']) as f:
             blacklist = [line.strip() for line in f]
@@ -93,10 +84,9 @@ if __name__ == '__main__':
     vid_names = [vid_name for vid_name in vid_names if \
         vid_valid(vid_name, config['vid_dir'], config['box_dir'], config['annot_dir'],
                   blacklist)]
-
     random.shuffle(vid_names)
 
-    if args.debug:
+    if debug:
         vid_names = vid_names[:500]
 
     print "Loading data..."
@@ -110,21 +100,9 @@ if __name__ == '__main__':
             print "{} samples processed.".format(idx)
     if idx % 500 != 0:
         print "{} samples processed.".format(idx)
+    return tot_data, vid_names
 
-    # read solver file
-    solver_param = caffe_pb2.SolverParameter()
-    with open(args.solver, 'r') as f:
-        protobuf.text_format.Merge(f.read(), solver_param)
-    max_iter = solver_param.max_iter
-    snapshot = solver_param.snapshot
-    snapshot_prefix = solver_param.snapshot_prefix
-
-    # get gpu id
-    gpus = solver_param.device_id
-    assert len(gpus) >= pool_size
-    cur_gpu = gpus[mpi_rank]
-    cfg.GPU_ID = cur_gpu
-
+def load_nets(args, cur_gpu):
     # initialize solver and feature net,
     # RNN should be initialized before CNN, because CNN cudnn conv layers
     # may assume using all available memory
@@ -144,13 +122,94 @@ if __name__ == '__main__':
         bbox_means = cPickle.load(f)
     with open(args.bbox_std, 'rb') as f:
         bbox_stds = cPickle.load(f)
-
     feature_net.params['bbox_pred_vid'][0].data[...] = \
         feature_net.params['bbox_pred_vid'][0].data * bbox_stds[:, np.newaxis]
-
     feature_net.params['bbox_pred_vid'][1].data[...] = \
         feature_net.params['bbox_pred_vid'][1].data * bbox_stds + bbox_means
+    return solver, feature_net, rnn
 
+def process_track_results(track_res):
+    # calculate targets, generate dummy track_proto
+    track_proto = {}
+    track_proto['video'] = vid_proto['video']
+    tracks = [[] for _ in xrange(num_tracks)]
+    for frame_res in track_res:
+        if 'frame' not in frame_res: break
+        frame = frame_res['frame']
+        rois = frame_res['roi']
+        assert len(tracks) == rois.shape[0]
+        for track, roi in zip(tracks, rois):
+            track.append(
+                {
+                    "frame": frame,
+                    "roi": roi.tolist()
+                }
+            )
+    track_proto['tracks'] = tracks
+    add_track_targets(track_proto, annot_proto, verbose=False)
+
+    # load data to RNN
+    # data
+    feat = np.asarray([res['feat'] for res in track_res if 'feat' in res])
+    if feat.shape[0] != track_length:
+        new_shape = list(feat.shape)
+        new_shape[0] = track_length
+        feat.resize(new_shape)
+    # cont
+    cont = np.ones(feat.shape[:2])
+    cont[0,:] = 0
+    # labels
+    labels = np.asarray([[frame['class_label'] for frame in track] \
+        for track in track_proto['tracks']]).T.copy()
+    if labels.shape[0] != track_length:
+        dummy_label = -np.ones((track_length, labels.shape[1]))
+        dummy_label[:labels.shape[0],:] = labels
+        labels = dummy_label
+    # bbox_targets
+    bbox_targets = np.asarray([[expend_bbox_targets(frame['bbox_target'], frame['class_label']) for frame in track] \
+        for track in track_proto['tracks']]).squeeze(axis=2).swapaxes(0,1).copy()
+    if bbox_targets.shape[0] != track_length:
+        bbox_targets.resize((track_length,) + bbox_targets.shape[1:])
+    # bbox_weights
+    bbox_weights = np.asarray([[expend_bbox_weights(frame['class_label']) for frame in track] \
+        for track in track_proto['tracks']]).squeeze(axis=2).swapaxes(0,1).copy()
+    if bbox_weights.shape[0] != track_length:
+        bbox_weights.resize((track_length,) + bbox_weights.shape[1:])
+
+    return feat, cont, labels, bbox_targets, bbox_weights
+
+if __name__ == '__main__':
+    args = parse_args()
+
+    comm = MPI.COMM_WORLD
+    mpi_rank = comm.Get_rank()
+    pool_size = comm.Get_size()
+
+    if args.rcnn_cfg is not None:
+        cfg_from_file(args.rcnn_cfg)
+
+    # load config file
+    with open(args.train_cfg) as f:
+        config = yaml.load(f.read())
+    print "Config:\n{}".format(config)
+
+    # load data
+    tot_data, vid_names = load_data(config, args.debug)
+
+    # read solver file
+    solver_param = caffe_pb2.SolverParameter()
+    with open(args.solver, 'r') as f:
+        protobuf.text_format.Merge(f.read(), solver_param)
+    max_iter = solver_param.max_iter
+
+    # get gpu id
+    gpus = solver_param.device_id
+    assert len(gpus) >= pool_size
+    cur_gpu = gpus[mpi_rank]
+    cfg.GPU_ID = cur_gpu
+
+    # load solver and nets
+    solver, feature_net, rnn = load_nets(args, cur_gpu)
 
     # start training
     iter = mpi_rank
@@ -168,66 +227,23 @@ if __name__ == '__main__':
         box_proto = tot_data[vid_name]['box']
         annot_proto = tot_data[vid_name]['annot']
 
+        # tracking
         track_res = roi_train_propagation(vid_proto, box_proto, feature_net,
             det_fun=im_detect,
             num_tracks=num_tracks,
             length=track_length,
             fg_ratio=config['fg_ratio'])
 
-        # calculate targets, generate dummy track_proto
-        track_proto = {}
-        track_proto['video'] = vid_proto['video']
-        tracks = [[] for _ in xrange(num_tracks)]
-        for frame_res in track_res:
-            if 'frame' not in frame_res: break
-            frame = frame_res['frame']
-            rois = frame_res['roi']
-            assert len(tracks) == rois.shape[0]
-            for track, roi in zip(tracks, rois):
-                track.append(
-                    {
-                        "frame": frame,
-                        "roi": roi.tolist()
-                    }
-                )
-        track_proto['tracks'] = tracks
-        add_track_targets(track_proto, annot_proto, verbose=False)
-
-        # load data to RNN
-        # data
-        feat = np.asarray([res['feat'] for res in track_res if 'feat' in res])
-        if feat.shape[0] != track_length:
-            new_shape = list(feat.shape)
-            new_shape[0] = track_length
-            feat.resize(new_shape)
+        feat, cont, labels, bbox_targets, bbox_weights = process_track_results(track_res)
         rnn.blobs['data'].reshape(*(feat.shape))
         rnn.blobs['data'].data[...] = feat
-        # cont
-        cont = np.ones(feat.shape[:2])
-        cont[0,:] = 0
         rnn.blobs['cont'].reshape(*(cont.shape))
         rnn.blobs['cont'].data[...] = cont
-        # labels
-        labels = np.asarray([[frame['class_label'] for frame in track] \
-            for track in track_proto['tracks']]).T.copy()
-        if labels.shape[0] != track_length:
-            dummy_label = -np.ones((track_length, labels.shape[1]))
-            dummy_label[:labels.shape[0],:] = labels
-            labels = dummy_label
         rnn.blobs['labels'].reshape(*(labels.shape))
         rnn.blobs['labels'].data[...] = labels
-        # bbox_targets
-        bbox_targets = np.asarray([[expend_bbox_targets(frame['bbox_target'], frame['class_label']) for frame in track] \
-            for track in track_proto['tracks']]).squeeze(axis=2).swapaxes(0,1).copy()
-        if bbox_targets.shape[0] != track_length:
-            bbox_targets.resize((track_length,) + bbox_targets.shape[1:])
         rnn.blobs['bbox_targets'].reshape(*bbox_targets.shape)
         rnn.blobs['bbox_targets'].data[...] = bbox_targets
-        # bbox_weights
-        bbox_weights = np.asarray([[expend_bbox_weights(frame['class_label']) for frame in track] \
-            for track in track_proto['tracks']]).squeeze(axis=2).swapaxes(0,1).copy()
-        if bbox_weights.shape[0] != track_length:
-            bbox_weights.resize((track_length,) + bbox_weights.shape[1:])
         rnn.blobs['bbox_weights'].reshape(*bbox_weights.shape)
         rnn.blobs['bbox_weights'].data[...] = bbox_weights
+
         solver.step(1)
