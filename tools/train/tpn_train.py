@@ -74,6 +74,12 @@ if __name__ == '__main__':
             blacklist = [line.strip() for line in f]
     else:
         blacklist = []
+    # check folder exists
+    for folder in ['vid_dir', 'box_dir', 'annot_dir']:
+        try:
+            assert os.path.isdir(config[folder])
+        except:
+            raise ValueError("{} folder does not exist: {}".format(folder, config[folder]))
 
     # preprocess data
     with open(config['vid_list']) as f:
