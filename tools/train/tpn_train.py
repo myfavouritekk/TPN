@@ -202,6 +202,7 @@ if __name__ == '__main__':
     comm = MPI.COMM_WORLD
     mpi_rank = comm.Get_rank()
     pool_size = comm.Get_size()
+    caffe.set_parallel()
 
     if args.rcnn_cfg is not None:
         cfg_from_file(args.rcnn_cfg)
