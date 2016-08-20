@@ -15,13 +15,16 @@ from mpi4py import MPI
 import google.protobuf as protobuf
 import yaml
 import glob
-from vdetlib.utils.protocol import proto_load
+from vdetlib.utils.protocol import proto_load, frame_path_at
+from vdetlib.utils.common import imread
+from vdetlib.utils.visual import add_bbox
 sys.path.insert(0, osp.join(this_dir, '../../src'))
 from tpn.propagate import roi_train_propagation
 from tpn.target import add_track_targets
 import numpy as np
 import cPickle
 import random
+import cv2
 
 def parse_args():
     parser = argparse.ArgumentParser('TPN training.')
@@ -31,6 +34,7 @@ def parse_args():
     parser.add_argument('--train_cfg')
     parser.add_argument('--rcnn_cfg')
     parser.add_argument('--debug', action='store_true')
+    parser.add_argument('--vis_debug', action='store_true')
     parser.add_argument('--bbox_mean', dest='bbox_mean',
                         help='the mean of bbox',
                         default=None, type=str)
@@ -42,7 +46,7 @@ def parse_args():
         help='RNN trained models.')
     restore.add_argument('--snapshot', type=str, default=None,
         help='RNN solverstates.')
-    parser.set_defaults(debug=False)
+    parser.set_defaults(debug=False, vis_debug=False)
     args = parser.parse_args()
     return args
 
@@ -178,6 +182,20 @@ def process_track_results(track_res):
 
     return feat, cont, labels, bbox_targets, bbox_weights
 
+def show_track_res(track_res, vid_proto):
+    cv2.namedWindow('tracks')
+    for frame_res in track_res:
+        if 'frame' not in frame_res: break
+        frame = frame_res['frame']
+        img = imread(frame_path_at(vid_proto, frame))
+        boxes = frame_res['roi'].tolist()
+        tracked = add_bbox(img, boxes, None, None, 2)
+        cv2.imshow('tracks', tracked)
+        if cv2.waitKey(0) == ord('q'):
+            cv2.destroyAllWindows()
+            sys.exit(0)
+    cv2.destroyAllWindows()
+
 if __name__ == '__main__':
     args = parse_args()
 
@@ -233,6 +251,9 @@ if __name__ == '__main__':
             num_tracks=num_tracks,
             length=track_length,
             fg_ratio=config['fg_ratio'])
+
+        if args.vis_debug:
+            show_track_res(track_res, vid_proto)
 
         feat, cont, labels, bbox_targets, bbox_weights = process_track_results(track_res)
         rnn.blobs['data'].reshape(*(feat.shape))
