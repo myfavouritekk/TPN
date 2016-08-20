@@ -19,12 +19,12 @@ import scipy.io as sio
 
 this_dir = osp.dirname(__file__)
 # add caffe-mpi path
-sys.path.insert(0, osp.join(this_dir, '../../external/caffe-mpi/python'))
+sys.path.insert(0, osp.join(this_dir, '../../external/caffe-mpi/build/install/python'))
 import caffe
 
 # add py-faster-rcnn paths
 sys.path.insert(0, osp.join(this_dir, '../../external/py-faster-rcnn/lib'))
-from fast_rcnn.test import im_detect
+from fast_rcnn.craft import im_detect
 from fast_rcnn.config import cfg, cfg_from_file, cfg_from_list
 from datasets.factory import get_imdb
 
