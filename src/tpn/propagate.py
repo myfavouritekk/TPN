@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # propagate bounding boxes
 
-from fast_rcnn.test import im_detect
+from fast_rcnn.craft import im_detect
 from fast_rcnn.bbox_transform import bbox_transform_inv
 from vdetlib.utils.protocol import proto_load, proto_dump, frame_path_at, boxes_at_frame
 from vdetlib.utils.timer import Timer

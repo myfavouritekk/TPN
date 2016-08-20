@@ -7,7 +7,7 @@ import os.path as osp
 this_dir = osp.dirname(__file__)
 sys.path.insert(0, osp.join(this_dir, '../../external/caffe-mpi/build/install/python'))
 sys.path.insert(0, osp.join(this_dir, '../../external/py-faster-rcnn/lib'))
-from fast_rcnn.test import im_detect
+from fast_rcnn.craft import im_detect
 from fast_rcnn.config import cfg, cfg_from_file
 import caffe
 from caffe.proto import caffe_pb2

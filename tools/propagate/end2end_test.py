@@ -8,7 +8,7 @@ sys.path.insert(0, 'external/caffe-mpi/build/install/python')
 import caffe
 import tensorflow as tf
 from fast_rcnn.config import cfg, cfg_from_file
-from fast_rcnn.test import im_detect
+from fast_rcnn.craft import im_detect
 import argparse
 from tpn.recurrent_extract_features import TestConfig
 from tpn.model import TPNModel
