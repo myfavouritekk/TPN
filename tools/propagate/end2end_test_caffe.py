@@ -1,10 +1,13 @@
 #!/usr/bin/env python
 
 import sys
-sys.path.insert(0, 'src')
-sys.path.insert(0, 'external/py-faster-rcnn/lib')
-sys.path.insert(0, 'external')
-sys.path.insert(0, 'external/caffe-mpi/build/install/python')
+import os
+import os.path as osp
+code_root=osp.join(osp.dirname(__file__), '../..')
+sys.path.insert(0, osp.join(code_root, 'src'))
+sys.path.insert(0, osp.join(code_root, 'external/py-faster-rcnn/lib'))
+sys.path.insert(0, osp.join(code_root, 'external'))
+sys.path.insert(0, osp.join(code_root, 'external/caffe-mpi/build/install/python'))
 import caffe
 from fast_rcnn.config import cfg, cfg_from_file
 from fast_rcnn.craft import im_detect
@@ -49,6 +52,7 @@ def parse_args():
     parser.add_argument('--offset', type=int, default=0,
                         help='Sampling offset. [0]')
     parser.add_argument('--vis_debug', action='store_true')
+    parser.add_argument('--gpus', nargs='+', default=None, type=int, help='Available GPUs.')
     parser.set_defaults(vis_debug=False)
     args = parser.parse_args()
     return args
@@ -57,7 +61,11 @@ def load_models(args):
 
     # load rnn model
     caffe.set_mode_gpu()
-    caffe.set_device(args.job_id - 1)
+    if args.gpus is None:
+        caffe.set_device(args.job_id - 1)
+    else:
+        assert args.job_id <= len(args.gpus)
+        caffe.set_device(args.gpus[args.job_id-1])
     rnn_net = caffe.Net(args.lstm_def, args.lstm_param, caffe.TEST)
     print 'Loaded RNN network from {:s}.'.format(args.lstm_def)
 
