@@ -441,7 +441,7 @@ def tpn_caffe_test(vid_proto, box_proto, net, rnn_net, det_fun=im_detect,
         end_probs = end_probs[:track_length]
         for box, cur_bbox_pred, cur_cls_pred_lstm, cur_end_prob in \
             zip(track, bbox_pred, cls_pred_lstm, end_probs):
-            box['scores_lstm'] = cur_cls_pred_lstm.tolist()
+            box['scores_lstm'] = cur_cls_pred_lstm.flatten().tolist()
             box['bbox_lstm'] = cur_bbox_pred.tolist()
             box['end_prob'] = float(cur_end_prob)
             del box['feature']

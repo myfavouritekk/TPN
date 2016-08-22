@@ -21,12 +21,12 @@ def _frame_dets(tracks, frame_idx, score_key, box_key):
             if frame_idx != frame['frame']: continue
             assert score_key in frame
             assert box_key in frame
-            cur_scores = frame[score_key]
-            cur_boxes = frame[box_key]
+            cur_scores = np.asarray(frame[score_key]).flatten()[np.newaxis,:]
+            cur_boxes = np.asarray(frame[box_key])[np.newaxis,:]
             num_cls = cur_scores.shape[1]
             # repeat boxes if not class specific
-            if cur_boxes.shape[1] != num_cls:
-                cur_boxes = np.repeat(cur_boxes[:,np.newaxis,:], num_cls, axis=1)
+            if cur_boxes.shape[1] == 4:
+                cur_boxes = np.repeat(cur_boxes, num_cls, axis=1)
             scores.append(cur_scores)
             boxes.append(cur_boxes)
     scores = np.concatenate(scores, 0)
