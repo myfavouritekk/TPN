@@ -26,7 +26,7 @@ def _frame_dets(tracks, frame_idx, score_key, box_key):
             num_cls = cur_scores.shape[1]
             # repeat boxes if not class specific
             if cur_boxes.shape[1] == 4:
-                cur_boxes = np.repeat(cur_boxes, num_cls, axis=1)
+                cur_boxes = np.tile(cur_boxes, num_cls)
             scores.append(cur_scores)
             boxes.append(cur_boxes)
     scores = np.concatenate(scores, 0)
@@ -115,6 +115,7 @@ if __name__ == '__main__':
                         all_boxes[j][global_idx] = all_boxes[j][global_idx][keep, :]
             end_time = time()
             print "{}/{}: {:.03f} s".format(global_idx + 1, len(image_list), end_time - start_time)
+            sys.stdout.flush()
 
     det_file = osp.join(args.output_dir, 'detections.pkl')
     if not osp.isdir(args.output_dir):
