@@ -325,8 +325,26 @@ def tpn_caffe_test(vid_proto, box_proto, net, rnn_net, det_fun=im_detect,
             box['bbox_lstm'] = cur_bbox_pred.tolist()
             box['end_prob'] = float(cur_end_prob)
             del box['feature']
-    track_proto['tracks'] = tracks
+        if track_idx % 500 == 0:
+            print "{} tracks processed.".format(track_idx)
+    if track_idx % 500 != 0:
+            print "{} tracks processed.".format(track_idx)
     return track_proto
+
+
+def _sample_boxes(boxes, tot_num, fg_ratio):
+    if fg_ratio == None:
+        return random.sample(boxes, num_tracks)
+    else:
+        cur_boxes = boxes
+        pos_boxes = [box for box in cur_boxes if box['positive']]
+        neg_boxes = [box for box in cur_boxes if not box['positive']]
+        num_pos = int(fg_ratio * tot_num)
+        if len(pos_boxes) < num_pos:
+            num_pos = len(pos_boxes)
+        num_neg = tot_num - num_pos
+        return random.sample(pos_boxes, num_pos) + random.sample(neg_boxes, num_neg)
+
 
 def roi_train_propagation(vid_proto, box_proto, net, det_fun=im_detect,
         cls_indices=None, scheme='weighted',
@@ -343,17 +361,7 @@ def roi_train_propagation(vid_proto, box_proto, net, det_fun=im_detect,
         st_frame = random.choice(all_boxes.keys())
     except:
         raise ValueError('{} has not valid frames for tracking.'.format(vid_proto['video']))
-    if fg_ratio == None:
-        st_boxes = random.sample(all_boxes[st_frame], num_tracks)
-    else:
-        cur_boxes = all_boxes[st_frame]
-        pos_boxes = [box for box in cur_boxes if box['positive']]
-        neg_boxes = [box for box in cur_boxes if not box['positive']]
-        num_pos = int(fg_ratio * num_tracks)
-        if len(pos_boxes) < num_pos:
-            num_pos = len(pos_boxes)
-        num_neg = num_tracks - num_pos
-        st_boxes = random.sample(pos_boxes, num_pos) + random.sample(neg_boxes, num_neg)
+    st_boxes = _sample_boxes(all_boxes[st_frame], num_tracks, fg_ratio)
 
     results = [{} for i in xrange(length)]
     finished = 0
@@ -379,24 +387,8 @@ def roi_train_propagation(vid_proto, box_proto, net, det_fun=im_detect,
         timer.tic()
 
         # scores: n x c, boxes: n x (c x 4)
-        scores = []
-        boxes = []
-        features = []
-        # split to several batches to avoid memory error
-        for roi_batch in np.split(rois, range(0, rois.shape[0], batch_size)[1:]):
-            num_rois = roi_batch.shape[0]
-            roi_holder = np.zeros((batch_size, 4), dtype=np.float32)
-            roi_holder[:num_rois,:] = np.asarray(roi_batch)
-            s_batch, b_batch = det_fun(net, im, roi_holder)
-            f_batch = net.blobs['global_pool'].data.copy().squeeze(axis=(2,3))
-            scores.append(s_batch[:num_rois,...])
-            boxes.append(b_batch[:num_rois,...])
-            features.append(f_batch[:num_rois,...])
-        scores = np.concatenate(scores, axis=0)
-        boxes = np.concatenate(boxes, axis=0)
-        boxes = boxes.reshape((boxes.shape[0], -1, 4))
-        features = np.concatenate(features, axis=0)
-        assert features.shape[0] == scores.shape[0]
+        scores, boxes, features = _batch_im_detect(net, im, rois,
+                                                   det_fun, batch_size)
 
         if cls_indices is not None:
             boxes = boxes[:, cls_indices, :]
@@ -405,21 +397,7 @@ def roi_train_propagation(vid_proto, box_proto, net, det_fun=im_detect,
             scores = scores / np.sum(scores, axis=1, keepdims=True)
 
         # propagation schemes
-        if scheme == 'mean':
-            # use mean regressions as predictios
-            pred_boxes = np.mean(boxes, axis=1)
-        elif scheme == 'max':
-            # use the regressions of the class with the maximum probability
-            # excluding __background__ class
-            max_cls = scores[:,1:].argmax(axis=1) + 1
-            pred_boxes = boxes[np.arange(len(boxes)), max_cls, :]
-        elif scheme == 'weighted':
-            # use class specific regression as predictions
-            cls_boxes = boxes[:,1:,:]
-            cls_scores = scores[:,1:]
-            pred_boxes = np.sum(cls_boxes * cls_scores[:,:,np.newaxis], axis=1) / np.sum(cls_scores, axis=1, keepdims=True)
-        else:
-            raise ValueError("Unknown scheme {}.".format(scheme))
+        pred_boxes = score_guided_box_merge(scores, boxes, scheme)
 
         results[finished]['bbox'] = boxes
         results[finished]['feat'] = features
