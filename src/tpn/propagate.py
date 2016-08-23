@@ -155,6 +155,49 @@ def _update_track(tracks, pred_boxes, scores, features, track_index, frame_id):
     ```
 """
 
+def _batch_im_detect(net, im, rois, det_fun, batch_size):
+    # scores: n x c, boxes: n x (c x 4)
+    scores = []
+    boxes = []
+    features = []
+    # split to several batches to avoid memory error
+    rois = np.asarray(rois)
+    num_rois = len(rois)
+    num_batches = int(np.ceil(float(num_rois) / batch_size))
+    for it in xrange(num_batches):
+        roi_batch = np.zeros((batch_size, 4), dtype=np.float32)
+        st = it * batch_size
+        ed = np.minimum((it+1)*batch_size, num_rois)
+        roi_batch[0:ed-st,:] = rois[st:ed,:]
+        s_batch, b_batch = det_fun(net, im, roi_batch)
+        f_batch = net.blobs['global_pool'].data.copy().squeeze(axis=(2,3))
+        # must copy() because of batches may overwrite each other
+        scores.append(s_batch.copy())
+        boxes.append(b_batch.copy())
+        features.append(f_batch.copy())
+    scores = np.vstack(scores)[:num_rois]
+    boxes = np.vstack(boxes)[:num_rois]
+    boxes = boxes.reshape((boxes.shape[0], -1, 4))[:num_rois]
+    features = np.vstack(features)[:num_rois]
+    return scores, boxes, features
+
+def score_guided_box_merge(scores, boxes, scheme):
+    if scheme == 'mean':
+        # use mean regressions as predictios
+        return np.mean(boxes, axis=1)
+    elif scheme == 'max':
+        # use the regressions of the class with the maximum probability
+        # excluding __background__ class
+        max_cls = scores[:,1:].argmax(axis=1) + 1
+        return boxes[np.arange(len(boxes)), max_cls, :].copy()
+    elif scheme == 'weighted':
+        # use class specific regression as predictions
+        cls_boxes = boxes[:,1:,:]
+        cls_scores = scores[:,1:]
+        return np.sum(cls_boxes * cls_scores[:,:,np.newaxis], axis=1) / np.sum(cls_scores, axis=1, keepdims=True)
+    else:
+        raise ValueError("Unknown scheme {}.".format(scheme))
+
 def roi_propagation(vid_proto, box_proto, net, det_fun=im_detect, scheme='max', length=None,
         sample_rate=1, offset=0, cls_indices=None, keep_feat=False,
         batch_size = 1024):
@@ -175,37 +218,15 @@ def roi_propagation(vid_proto, box_proto, net, det_fun=im_detect, scheme='max', 
         # extract rois on the current frame
         rois, track_index = _cur_rois(tracks, frame['frame'])
         if len(rois) == 0: continue
-        # print "Frame {}: {} proposals".format(frame['frame'], len(rois))
+
         timer = Timer()
         timer.tic()
 
-
         # scores: n x c, boxes: n x (c x 4)
-        scores = []
-        boxes = []
-        features = []
-        # split to several batches to avoid memory error
-        rois = np.asarray(rois)
-        num_rois = len(rois)
-        num_batches = int(np.ceil(float(num_rois) / batch_size))
-        for it in xrange(num_batches):
-            roi_batch = np.zeros((batch_size, 4), dtype=np.float32)
-            st = it * batch_size
-            ed = np.minimum((it+1)*batch_size, num_rois)
-            roi_batch[0:ed-st,:] = rois[st:ed,:]
-            s_batch, b_batch = det_fun(net, im, roi_batch)
-            f_batch = net.blobs['global_pool'].data.copy().squeeze(axis=(2,3))
-            # must copy() because of batches may overwrite each other
-            scores.append(s_batch.copy())
-            boxes.append(b_batch.copy())
-            features.append(f_batch)
-        scores = np.concatenate(scores, axis=0)[:num_rois]
-        boxes = np.concatenate(boxes, axis=0)[:num_rois]
-        boxes = boxes.reshape((boxes.shape[0], -1, 4))[:num_rois]
-        if keep_feat:
-            features = np.concatenate(features, axis=0)[:num_rois]
-            assert features.shape[0] == scores.shape[0]
-        else:
+        scores, boxes, features = _batch_im_detect(net, im, rois,
+                                                   det_fun, batch_size)
+
+        if not keep_feat:
             features = None
         if cls_indices is not None:
             boxes = boxes[:, cls_indices, :]
@@ -214,21 +235,7 @@ def roi_propagation(vid_proto, box_proto, net, det_fun=im_detect, scheme='max', 
             scores = scores / np.sum(scores, axis=1, keepdims=True)
 
         # propagation schemes
-        if scheme == 'mean':
-            # use mean regressions as predictios
-            pred_boxes = np.mean(boxes, axis=1)
-        elif scheme == 'max':
-            # use the regressions of the class with the maximum probability
-            # excluding __background__ class
-            max_cls = scores[:,1:].argmax(axis=1) + 1
-            pred_boxes = boxes[np.arange(len(boxes)), max_cls, :]
-        elif scheme == 'weighted':
-            # use class specific regression as predictions
-            cls_boxes = boxes[:,1:,:]
-            cls_scores = scores[:,1:]
-            pred_boxes = np.sum(cls_boxes * cls_scores[:,:,np.newaxis], axis=1) / np.sum(cls_scores, axis=1, keepdims=True)
-        else:
-            raise ValueError("Unknown scheme {}.".format(scheme))
+        pred_boxes = score_guided_box_merge(scores, boxes, scheme)
 
         # update track bbox
         _update_track(tracks, pred_boxes, scores, features, track_index, frame['frame'])
