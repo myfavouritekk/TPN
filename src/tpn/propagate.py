@@ -248,77 +248,14 @@ def roi_propagation(vid_proto, box_proto, net, det_fun=im_detect, scheme='max', 
 
 def tpn_test(vid_proto, box_proto, net, rnn_net, session, det_fun=im_detect, scheme='max', length=None,
         sample_rate=1, offset=0, cls_indices=None, batch_size=64):
-    track_proto = {}
-    track_proto['video'] = vid_proto['video']
-    track_proto['method'] = 'roi_propagation'
-    max_frame = vid_proto['frames'][-1]['frame']
-    if not length: length = max_frame
-    tracks = _box_proto_to_track(box_proto, max_frame, length, sample_rate,
-                offset)
+    # same as roi_propagation except keep_feat is always True
+    track_proto = roi_propagation(vid_proto, box_proto, net, det_fun=det_fun,
+        scheme=scheme, length=length, sample_rate=sample_rate,
+        offset=offset, cls_indices=cls_indices, batch_size=batch_size,
+        keep_feat=True)
 
-    for idx, frame in enumerate(vid_proto['frames'], start=1):
-        # Load the demo image
-        image_name = frame_path_at(vid_proto, frame['frame'])
-        im = imread(image_name)
-
-        # Detect all object classes and regress object bounds
-        # extract rois on the current frame
-        rois, track_index = _cur_rois(tracks, frame['frame'])
-        if len(rois) == 0: continue
-        # print "Frame {}: {} proposals".format(frame['frame'], len(rois))
-        timer = Timer()
-        timer.tic()
-
-        # scores: n x c, boxes: n x (c x 4)
-        scores = []
-        boxes = []
-        features = []
-        # split to several batches to avoid memory error
-        for roi_batch in np.split(np.asarray(rois), range(0, len(rois), batch_size)[1:]):
-            num_rois = roi_batch.shape[0]
-            roi_holder = np.zeros((batch_size, 4), dtype=np.float32)
-            roi_holder[:num_rois,:] = np.asarray(roi_batch)
-            s_batch, b_batch = det_fun(net, im, roi_holder)
-            f_batch = net.blobs['global_pool'].data.copy().squeeze(axis=(2,3))
-            scores.append(s_batch[:num_rois,...])
-            boxes.append(b_batch[:num_rois,...])
-            features.append(f_batch[:num_rois,...])
-        scores = np.concatenate(scores, axis=0)
-        boxes = np.concatenate(boxes, axis=0)
-        boxes = boxes.reshape((boxes.shape[0], -1, 4))
-        features = np.concatenate(features, axis=0)
-        assert features.shape[0] == scores.shape[0]
-
-        if cls_indices is not None:
-            boxes = boxes[:, cls_indices, :]
-            scores = scores[:, cls_indices]
-            # scores normalization
-            scores = scores / np.sum(scores, axis=1, keepdims=True)
-
-        # propagation schemes
-        if scheme == 'mean':
-            # use mean regressions as predictios
-            pred_boxes = np.mean(boxes, axis=1)
-        elif scheme == 'max':
-            # use the regressions of the class with the maximum probability
-            # excluding __background__ class
-            max_cls = scores[:,1:].argmax(axis=1) + 1
-            pred_boxes = boxes[np.arange(len(boxes)), max_cls, :]
-        elif scheme == 'weighted':
-            # use class specific regression as predictions
-            cls_boxes = boxes[:,1:,:]
-            cls_scores = scores[:,1:]
-            pred_boxes = np.sum(cls_boxes * cls_scores[:,:,np.newaxis], axis=1) / np.sum(cls_scores, axis=1, keepdims=True)
-        else:
-            raise ValueError("Unknown scheme {}.".format(scheme))
-
-        # update track bbox
-        _update_track(tracks, pred_boxes, scores, features, track_index, frame['frame'])
-        timer.toc()
-        print ('Frame {}: Detection took {:.3f}s for '
-               '{:d} object proposals').format(frame['frame'], timer.total_time, len(rois))
     print 'Running LSTM...'
-    for track in tracks:
+    for track in track_proto['tracks']:
         feat = np.asarray([box['feature'] for box in track])
         track_length = len(track)
         expend_feat = np.zeros((rnn_net.num_steps,) + feat.shape[1:])
@@ -343,88 +280,24 @@ def tpn_test(vid_proto, box_proto, net, rnn_net, session, det_fun=im_detect, sch
             box['bbox_lstm'] = cur_bbox_pred.tolist()
             box['end_prob'] = float(cur_end_prob)
             del box['feature']
-    track_proto['tracks'] = tracks
     return track_proto
 
 def tpn_caffe_test(vid_proto, box_proto, net, rnn_net, det_fun=im_detect,
         scheme='weighted', length=None,
         sample_rate=1, offset=0, cls_indices=None, batch_size=64):
-    track_proto = {}
-    track_proto['video'] = vid_proto['video']
-    track_proto['method'] = 'roi_propagation'
-    max_frame = vid_proto['frames'][-1]['frame']
-    if not length: length = max_frame
-    tracks = _box_proto_to_track(box_proto, max_frame, length, sample_rate,
-                offset)
+    # same as roi_propagation except keep_feat is always True
+    track_proto = roi_propagation(vid_proto, box_proto, net, det_fun=det_fun,
+        scheme=scheme, length=length, sample_rate=sample_rate,
+        offset=offset, cls_indices=cls_indices, batch_size=batch_size,
+        keep_feat=True)
 
-    for idx, frame in enumerate(vid_proto['frames'], start=1):
-        # Load the demo image
-        image_name = frame_path_at(vid_proto, frame['frame'])
-        im = imread(image_name)
-
-        # Detect all object classes and regress object bounds
-        # extract rois on the current frame
-        rois, track_index = _cur_rois(tracks, frame['frame'])
-        if len(rois) == 0: continue
-        # print "Frame {}: {} proposals".format(frame['frame'], len(rois))
-        timer = Timer()
-        timer.tic()
-
-        # scores: n x c, boxes: n x (c x 4)
-        scores = []
-        boxes = []
-        features = []
-        # split to several batches to avoid memory error
-        for roi_batch in np.split(np.asarray(rois), range(0, len(rois), batch_size)[1:]):
-            num_rois = roi_batch.shape[0]
-            roi_holder = np.zeros((batch_size, 4), dtype=np.float32)
-            roi_holder[:num_rois,:] = np.asarray(roi_batch)
-            s_batch, b_batch = det_fun(net, im, roi_holder)
-            f_batch = net.blobs['global_pool'].data.copy().squeeze(axis=(2,3))
-            scores.append(s_batch[:num_rois,...])
-            boxes.append(b_batch[:num_rois,...])
-            features.append(f_batch[:num_rois,...])
-        scores = np.concatenate(scores, axis=0)
-        boxes = np.concatenate(boxes, axis=0)
-        boxes = boxes.reshape((boxes.shape[0], -1, 4))
-        features = np.concatenate(features, axis=0)
-        assert features.shape[0] == scores.shape[0]
-
-        if cls_indices is not None:
-            boxes = boxes[:, cls_indices, :]
-            scores = scores[:, cls_indices]
-            # scores normalization
-            scores = scores / np.sum(scores, axis=1, keepdims=True)
-
-        # propagation schemes
-        if scheme == 'mean':
-            # use mean regressions as predictios
-            pred_boxes = np.mean(boxes, axis=1)
-        elif scheme == 'max':
-            # use the regressions of the class with the maximum probability
-            # excluding __background__ class
-            max_cls = scores[:,1:].argmax(axis=1) + 1
-            pred_boxes = boxes[np.arange(len(boxes)), max_cls, :]
-        elif scheme == 'weighted':
-            # use class specific regression as predictions
-            cls_boxes = boxes[:,1:,:]
-            cls_scores = scores[:,1:]
-            pred_boxes = np.sum(cls_boxes * cls_scores[:,:,np.newaxis], axis=1) / np.sum(cls_scores, axis=1, keepdims=True)
-        else:
-            raise ValueError("Unknown scheme {}.".format(scheme))
-
-        # update track bbox
-        _update_track(tracks, pred_boxes, scores, features, track_index, frame['frame'])
-        timer.toc()
-        print ('Frame {}: Detection took {:.3f}s for '
-               '{:d} object proposals').format(frame['frame'], timer.total_time, len(rois))
     print 'Running LSTM...'
     cont = np.ones((length,1))
     cont[0,:] = 0
     rnn_net.blobs['cont'].reshape(*cont.shape)
     rnn_net.blobs['cont'].data[...] = cont
 
-    for track in tracks:
+    for track_idx, track in enumerate(track_proto['tracks'], start=1):
         feat = np.asarray([box['feature'] for box in track])
         track_length = len(track)
         expend_feat = np.zeros((length, 1) + feat.shape[1:])
