@@ -53,13 +53,12 @@ def _write_ilsvrc_results_file(all_boxes, f):
                                dets[k, 0] + 1, dets[k, 1] + 1,
                                dets[k, 2] + 1, dets[k, 3] + 1))
 
-def _load_proto(tracks, vid_dir, results_queue):
-    for track_path in tracks:
-        vid_name = osp.split(track_path)[-1].split('.')[0]
-        vid_proto = proto_load(osp.join(vid_dir, vid_name + '.vid'))
-        track_proto = proto_load(track_path)
-        assert vid_proto['video'] == track_proto['video']
-        results_queue.put((vid_proto, track_proto))
+def _load_proto(track_path, vid_dir, results_queue):
+    vid_name = osp.split(track_path)[-1].split('.')[0]
+    vid_proto = proto_load(osp.join(vid_dir, vid_name + '.vid'))
+    track_proto = proto_load(track_path)
+    assert vid_proto['video'] == track_proto['video']
+    results_queue.put((vid_proto, track_proto))
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -89,12 +88,17 @@ if __name__ == '__main__':
     tracks = sorted(glob.glob(osp.join(args.track_dir, '*')))
     queue = mp.Queue()
     data_loader = mp.Process(target=_load_proto, name='load_proto',
-        args=(tracks, args.vid_dir, queue))
+        args=(tracks[0], args.vid_dir, queue))
     data_loader.start()
-    for track_path in tracks:
+    for track_id, track_path in enumerate(tracks):
         print track_path
         vid_name = osp.split(track_path)[-1].split('.')[0]
         vid_proto, track_proto = queue.get()
+        data_loader.join()
+        if track_id + 1 < len(tracks):
+            data_loader = mp.Process(target=_load_proto, name='load_proto',
+                args=(tracks[track_id+1], args.vid_dir, queue))
+            data_loader.start()
         assert vid_proto['video'] == vid_name
         for frame in vid_proto['frames']:
             frame_name = osp.join(vid_name, osp.splitext(frame['path'])[0])
