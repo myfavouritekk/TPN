@@ -13,7 +13,6 @@ sys.path.insert(0, osp.join(this_dir, '../../src'))
 from fast_rcnn.nms_wrapper import nms
 import cPickle
 from time import time
-import multiprocessing as mp
 from tpn.evaluate import write_ilsvrc_results_file
 
 def _frame_dets(tracks, frame_idx, score_key, box_key):
@@ -35,13 +34,6 @@ def _frame_dets(tracks, frame_idx, score_key, box_key):
     scores = np.concatenate(scores, 0)
     boxes = np.concatenate(boxes, 0)
     return scores, boxes
-
-def _load_proto(track_path, vid_dir, results_queue):
-    vid_name = osp.split(track_path)[-1].split('.')[0]
-    vid_proto = proto_load(osp.join(vid_dir, vid_name + '.vid'))
-    track_proto = proto_load(track_path)
-    assert vid_proto['video'] == track_proto['video']
-    results_queue.put((vid_proto, track_proto))
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -72,15 +64,11 @@ if __name__ == '__main__':
 
     # process vid detections
     tracks = sorted(glob.glob(osp.join(args.track_dir, '*')))
-    queue = mp.Queue()
-    data_loader = mp.Process(target=_load_proto, name='load_proto',
-        args=(tracks, args.vid_dir, queue))
-    data_loader.start()
     for track_path in tracks:
         print track_path
         vid_name = osp.split(track_path)[-1].split('.')[0]
-        vid_proto, track_proto = queue.get()
-        assert vid_proto['video'] == vid_name
+        vid_proto = proto_load(osp.join(args.vid_dir, vid_name + '.vid'))
+        track_proto = proto_load(track_path)
         for frame in vid_proto['frames']:
             frame_name = osp.join(vid_name, osp.splitext(frame['path'])[0])
             if frame_name not in image_list.keys(): continue
