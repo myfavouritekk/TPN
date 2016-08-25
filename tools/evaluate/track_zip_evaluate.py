@@ -8,7 +8,8 @@ from data_io import tpn_test_iterator
 from vdetlib.utils.protocol import proto_load
 import numpy as np
 import sys
-sys.path.insert(0, '/Volumes/Research/ImageNet2016/Code/external/kwang/py-faster-rcnn-craft/lib')
+this_dir=osp.dirname(__file__)
+sys.path.insert(0, osp.join(this_dir, '../../external/py-faster-rcnn/lib'))
 from fast_rcnn.nms_wrapper import nms
 import cPickle
 from time import time
