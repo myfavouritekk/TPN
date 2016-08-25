@@ -74,17 +74,12 @@ if __name__ == '__main__':
     tracks = sorted(glob.glob(osp.join(args.track_dir, '*')))
     queue = mp.Queue()
     data_loader = mp.Process(target=_load_proto, name='load_proto',
-        args=(tracks[0], args.vid_dir, queue))
+        args=(tracks, args.vid_dir, queue))
     data_loader.start()
-    for track_id, track_path in enumerate(tracks):
+    for track_path in tracks:
         print track_path
         vid_name = osp.split(track_path)[-1].split('.')[0]
         vid_proto, track_proto = queue.get()
-        data_loader.join()
-        if track_id + 1 < len(tracks):
-            data_loader = mp.Process(target=_load_proto, name='load_proto',
-                args=(tracks[track_id+1], args.vid_dir, queue))
-            data_loader.start()
         assert vid_proto['video'] == vid_name
         for frame in vid_proto['frames']:
             frame_name = osp.join(vid_name, osp.splitext(frame['path'])[0])
