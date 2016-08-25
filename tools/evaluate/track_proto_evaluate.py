@@ -9,10 +9,12 @@ import numpy as np
 import sys
 this_dir = osp.dirname(__file__)
 sys.path.insert(0, osp.join(this_dir, '../../external/py-faster-rcnn/lib/'))
+sys.path.insert(0, osp.join(this_dir, '../../src'))
 from fast_rcnn.nms_wrapper import nms
 import cPickle
 from time import time
 import multiprocessing as mp
+from tpn.evaluate import write_ilsvrc_results_file
 
 def _frame_dets(tracks, frame_idx, score_key, box_key):
     scores = []
@@ -34,25 +36,6 @@ def _frame_dets(tracks, frame_idx, score_key, box_key):
     boxes = np.concatenate(boxes, 0)
     return scores, boxes
 
-def _write_ilsvrc_results_file(all_boxes, f):
-    num_images = len(all_boxes[0])
-    num_classes = len(all_boxes)
-    for im_ind in xrange(num_images):
-        for cls_ind in xrange(num_classes):
-            if cls_ind == 0:
-                continue
-            dets = all_boxes[cls_ind][im_ind]
-            if dets == []:
-                continue
-            keep_inds = np.where(dets[:, -1]>=0.01)[0]
-            dets = dets[keep_inds, :]
-            # the VOCdevkit expects 1-based indices
-            for k in xrange(dets.shape[0]):
-                f.write('{:d} {:d} {:.3f} {:.1f} {:.1f} {:.1f} {:.1f}\n'.
-                        format(im_ind+1, cls_ind, dets[k, -1],
-                               dets[k, 0] + 1, dets[k, 1] + 1,
-                               dets[k, 2] + 1, dets[k, 3] + 1))
-
 def _load_proto(track_path, vid_dir, results_queue):
     vid_name = osp.split(track_path)[-1].split('.')[0]
     vid_proto = proto_load(osp.join(vid_dir, vid_name + '.vid'))
@@ -71,9 +54,12 @@ if __name__ == '__main__':
     parser.add_argument('output_dir')
     parser.add_argument('--results', type=str, default='',
         help='Result file.')
-    parser.add_argument('--thresh', type=float, default=0.05)
-    parser.add_argument('--num_classes', type=int, default=31)
-    parser.add_argument('--max_per_image', type=int, default=100)
+    parser.add_argument('--thres', type=float, default=0.01,
+        help='Detection score threshold. [0.01]')
+    parser.add_argument('--num_classes', type=int, default=31,
+        help='Number of classes. [31]')
+    parser.add_argument('--max_per_image', type=int, default=100,
+        help='Maximum detection in each image. [100]')
     args = parser.parse_args()
 
     # read image_list
@@ -112,7 +98,7 @@ if __name__ == '__main__':
             boxes = boxes.reshape((boxes.shape[0], -1))
 
             for j in xrange(1, num_classes):
-                inds = np.where(scores[:, j] > args.thresh)[0]
+                inds = np.where(scores[:, j] > args.thres)[0]
                 cls_scores = scores[inds, j]
                 cls_boxes = boxes[inds, j*4:(j+1)*4]
                 cls_dets = np.hstack((cls_boxes, cls_scores[:, np.newaxis])) \
@@ -142,4 +128,4 @@ if __name__ == '__main__':
 
     if args.results:
         with open(args.results, 'w') as f:
-            _write_ilsvrc_results_file(all_boxes, f)
+            write_ilsvrc_results_file(all_boxes, f, thres=args.thres)
