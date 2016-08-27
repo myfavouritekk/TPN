@@ -1,12 +1,16 @@
 #!/usr/bin/env python
 
 import os, sys
+import os.path as osp
 import pdb
 import argparse
 import scipy.io as sio
 import h5py
-sys.path.insert(1, '.')
-from vdetlib.utils.protocol import proto_dump, path_to_index, proto_load
+this_dir = osp.dirname(__file__)
+sys.path.insert(1, osp.join(this_dir, '../../external/'))
+from vdetlib.utils.protocol import proto_dump, path_to_index, proto_load, annot_boxes_at_frame
+from vdetlib.utils.common import iou
+import numpy as np
 
 def save_if_not_exist(proto, path):
     if not os.path.isfile(path):
@@ -16,6 +20,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('proposal_file')
     parser.add_argument('vid_root')
+    parser.add_argument('annot_root')
     parser.add_argument('save_root')
     args = parser.parse_args()
 
@@ -49,15 +54,22 @@ if __name__ == '__main__':
             # read vid_proto
             vid_proto = proto_load(
                 os.path.join(args.vid_root, cur_vid_name+'.vid'))
+            annot_proto = proto_load(
+                os.path.join(args.annot_root, cur_vid_name+'.annot'))
         # process boxes
         frame_idx = path_to_index(vid_proto, frame_name)
+        annot_boxes = annot_boxes_at_frame(annot_proto, frame_idx)
         for box in boxes:
-            # pdb.set_trace()
+            bbox = box[0:4].tolist()
+            if len(annot_boxes) == 0:
+                overlaps = 0.
+            else:
+                overlaps = iou([bbox], annot_boxes)
             box_proto['boxes'].append(
                 {
                     "frame": frame_idx,
                     "bbox": box[0:4].tolist(),
-                    "positive": True if box[4] == 1 else False
+                    "positive": True if np.any(overlaps>=0.5) else False
                 }
             )
     # save last proto
