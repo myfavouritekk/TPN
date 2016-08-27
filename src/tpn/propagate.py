@@ -334,7 +334,7 @@ def tpn_caffe_test(vid_proto, box_proto, net, rnn_net, det_fun=im_detect,
 
 def _sample_boxes(boxes, tot_num, fg_ratio):
     if fg_ratio == None:
-        return random.sample(boxes, num_tracks)
+        return random.sample(boxes, tot_num)
     else:
         cur_boxes = boxes
         pos_boxes = [box for box in cur_boxes if box['positive']]
