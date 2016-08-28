@@ -42,15 +42,19 @@ if __name__ == '__main__':
     parser.add_argument('track_dir',
         help='Directory that contains all track detection results.')
     parser.add_argument('vid_dir')
-    parser.add_argument('image_list')
+    parser.add_argument('image_list',
+        help='Official image set list.')
     parser.add_argument('score_key')
     parser.add_argument('box_key')
     parser.add_argument('output_dir')
     parser.add_argument('--results', type=str, default='',
         help='Result file.')
-    parser.add_argument('--thres', type=float, default=0.01)
-    parser.add_argument('--num_classes', type=int, default=31)
-    parser.add_argument('--max_per_image', type=int, default=100)
+    parser.add_argument('--thres', type=float, default=0.01,
+        help='Detection score threshold. [0.01]')
+    parser.add_argument('--num_classes', type=int, default=31,
+        help='Number of classes. [31]')
+    parser.add_argument('--max_per_image', type=int, default=100,
+        help='Maximum number of detections per image. [100]')
     args = parser.parse_args()
 
     # read image_list

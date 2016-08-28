@@ -66,8 +66,12 @@ def load_models(args):
     else:
         assert args.job_id <= len(args.gpus)
         caffe.set_device(args.gpus[args.job_id-1])
-    rnn_net = caffe.Net(args.lstm_def, args.lstm_param, caffe.TEST)
-    print 'Loaded RNN network from {:s}.'.format(args.lstm_def)
+    if args.lstm_param is not '':
+        rnn_net = caffe.Net(args.lstm_def, args.lstm_param, caffe.TEST)
+        print 'Loaded RNN network from {:s}.'.format(args.lstm_def)
+    else:
+        rnn_net = caffe.Net(args.lstm_def, caffe.TEST)
+        print 'WARNING: dummy RNN network created.'
 
     # load feature model
     feature_net = caffe.Net(args.def_file, args.param, caffe.TEST)
