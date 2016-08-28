@@ -4,7 +4,6 @@ import argparse
 import os
 import os.path as osp
 import glob
-from data_io import tpn_test_iterator
 from vdetlib.utils.protocol import proto_load
 import numpy as np
 import sys
@@ -15,6 +14,7 @@ from fast_rcnn.nms_wrapper import nms
 import cPickle
 from time import time
 from tpn.evaluate import write_ilsvrc_results_file
+from tpn.data_io import tpn_test_iterator
 
 def _frame_dets(tracks, frame_idx, score_key, box_key):
     scores = []
