@@ -56,16 +56,19 @@ def vid_valid(vid_name, vid_dir, box_dir, annot_dir, blacklist=[]):
         osp.isfile(osp.join(annot_dir, vid_name + ".annot")) and \
         vid_name not in blacklist
 
-def expend_bbox_targets(bbox_targets, class_label, num_classes=31):
+def expend_bbox_targets(bbox_targets, class_label, mean, std, num_classes=31):
     bbox_targets = np.asarray(bbox_targets)
     assert bbox_targets.shape == (1,4)
-    expend_targets = np.zeros((num_classes, 4))
-    expend_targets[class_label,:] = bbox_targets
+    expend_targets = np.zeros((num_classes, 4), dtype=np.float32)
+    if class_label != 0 and class_label != -1:
+        expend_targets[class_label,:] = (bbox_targets
+            - mean[class_label*4:(class_label+1)*4]) \
+            / std[class_label*4:(class_label+1)*4]
     return expend_targets.reshape((1,-1))
 
 def expend_bbox_weights(class_label, num_classes=31):
-    expend_weights = np.zeros((num_classes, 4))
-    if class_label != 0:
+    expend_weights = np.zeros((num_classes, 4), dtype=np.float32)
+    if class_label != 0 and class_label != -1:
         expend_weights[class_label,:] = 1.
     return expend_weights.reshape((1,-1))
 
@@ -130,15 +133,32 @@ def load_nets(args, cur_gpu):
         feature_net.params['bbox_pred_vid'][0].data * bbox_stds[:, np.newaxis]
     feature_net.params['bbox_pred_vid'][1].data[...] = \
         feature_net.params['bbox_pred_vid'][1].data * bbox_stds + bbox_means
-    return solver, feature_net, rnn
+    return solver, feature_net, rnn, bbox_means, bbox_stds
 
-def process_track_results(track_res):
+def _pad_array(array, len_first_dim, value=0.):
+    num = array.shape[0]
+    if num != len_first_dim:
+        new_shape = list(array.shape)
+        new_shape[0] = len_first_dim
+        padded_array = np.ones(new_shape) * value
+        padded_array[:num,...] = array
+        return padded_array
+    else:
+        return array
+
+def process_track_results(track_res, bbox_means, bbox_stds):
     # calculate targets, generate dummy track_proto
+    # track_res[0]:
+    #   roi: n * 4
+    #   frame: int
+    #   feat: n * c
+    #   bbox: n * num_cls * 4
     track_proto = {}
     track_proto['video'] = vid_proto['video']
     tracks = [[] for _ in xrange(num_tracks)]
+    feat = []
     for frame_res in track_res:
-        if 'frame' not in frame_res: break
+        if frame_res['frame'] == -1: break
         frame = frame_res['frame']
         rois = frame_res['roi']
         assert len(tracks) == rois.shape[0]
@@ -149,37 +169,29 @@ def process_track_results(track_res):
                     "roi": roi.tolist()
                 }
             )
+        feat.append(frame_res['feat'])
     track_proto['tracks'] = tracks
     add_track_targets(track_proto, annot_proto, verbose=False)
 
     # load data to RNN
     # data
-    feat = np.asarray([res['feat'] for res in track_res if 'feat' in res])
-    if feat.shape[0] != track_length:
-        new_shape = list(feat.shape)
-        new_shape[0] = track_length
-        feat.resize(new_shape)
+    feat = _pad_array(np.asarray(feat), track_length)
     # cont
     cont = np.ones(feat.shape[:2])
     cont[0,:] = 0
     # labels
     labels = np.asarray([[frame['class_label'] for frame in track] \
         for track in track_proto['tracks']]).T.copy()
-    if labels.shape[0] != track_length:
-        dummy_label = -np.ones((track_length, labels.shape[1]))
-        dummy_label[:labels.shape[0],:] = labels
-        labels = dummy_label
+    labels = _pad_array(labels, track_length, -1)
     # bbox_targets
-    bbox_targets = np.asarray([[expend_bbox_targets(frame['bbox_target'], frame['class_label']) for frame in track] \
+    bbox_targets = np.asarray([[expend_bbox_targets(frame['bbox_target'],
+            frame['class_label'], bbox_means, bbox_stds) for frame in track] \
         for track in track_proto['tracks']]).squeeze(axis=2).swapaxes(0,1).copy()
-    if bbox_targets.shape[0] != track_length:
-        bbox_targets.resize((track_length,) + bbox_targets.shape[1:])
+    bbox_targets = _pad_array(bbox_targets, track_length)
     # bbox_weights
     bbox_weights = np.asarray([[expend_bbox_weights(frame['class_label']) for frame in track] \
         for track in track_proto['tracks']]).squeeze(axis=2).swapaxes(0,1).copy()
-    if bbox_weights.shape[0] != track_length:
-        bbox_weights.resize((track_length,) + bbox_weights.shape[1:])
-
+    bbox_weights = _pad_array(bbox_weights, track_length)
     return feat, cont, labels, bbox_targets, bbox_weights
 
 def show_track_res(track_res, vid_proto):
@@ -228,7 +240,7 @@ if __name__ == '__main__':
     cfg.GPU_ID = cur_gpu
 
     # load solver and nets
-    solver, feature_net, rnn = load_nets(args, cur_gpu)
+    solver, feature_net, rnn, bbox_means, bbox_stds = load_nets(args, cur_gpu)
 
     # start training
     iter = mpi_rank
@@ -256,7 +268,8 @@ if __name__ == '__main__':
         if args.vis_debug:
             show_track_res(track_res, vid_proto)
 
-        feat, cont, labels, bbox_targets, bbox_weights = process_track_results(track_res)
+        feat, cont, labels, bbox_targets, bbox_weights = process_track_results(
+            track_res, bbox_means, bbox_stds)
         rnn.blobs['data'].reshape(*(feat.shape))
         rnn.blobs['data'].data[...] = feat
         rnn.blobs['cont'].reshape(*(cont.shape))
