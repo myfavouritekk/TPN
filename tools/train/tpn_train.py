@@ -197,7 +197,7 @@ def process_track_results(track_res, bbox_means, bbox_stds):
 def show_track_res(track_res, vid_proto):
     cv2.namedWindow('tracks')
     for frame_res in track_res:
-        if 'frame' not in frame_res: break
+        if frame_res['frame'] == -1: break
         frame = frame_res['frame']
         img = imread(frame_path_at(vid_proto, frame))
         boxes = frame_res['roi'].tolist()
