@@ -363,19 +363,19 @@ def roi_train_propagation(vid_proto, box_proto, net, det_fun=im_detect,
         raise ValueError('{} has not valid frames for tracking.'.format(vid_proto['video']))
     st_boxes = _sample_boxes(all_boxes[st_frame], num_tracks, fg_ratio)
 
-    results = [{} for i in xrange(length)]
-    finished = 0
+    results = [{'frame': -1} for i in xrange(length)]
+    anchor = 0
     for frame in vid_proto['frames']:
         frame_id = frame['frame']
         if frame_id < st_frame: continue
-        if finished >= length: break
+        if anchor >= length: break
 
-        res = results[finished]
+        res = results[anchor]
         res['frame'] = frame_id
-        if finished == 0: res['roi'] = np.asarray([st_box['bbox'] for st_box in st_boxes])
+        if anchor == 0: res['roi'] = np.asarray([st_box['bbox'] for st_box in st_boxes])
 
         # Load the demo image
-        image_name = frame_path_at(vid_proto, frame['frame'])
+        image_name = frame_path_at(vid_proto, frame_id)
         im = imread(image_name)
 
         # Detect all object classes and regress object bounds
@@ -386,7 +386,7 @@ def roi_train_propagation(vid_proto, box_proto, net, det_fun=im_detect,
         timer = Timer()
         timer.tic()
 
-        # scores: n x c, boxes: n x (c x 4)
+        # scores: n x c, boxes: n x (c x 4), features: n * c
         scores, boxes, features = _batch_im_detect(net, im, rois,
                                                    det_fun, batch_size)
 
@@ -399,9 +399,9 @@ def roi_train_propagation(vid_proto, box_proto, net, det_fun=im_detect,
         # propagation schemes
         pred_boxes = score_guided_box_merge(scores, boxes, scheme)
 
-        results[finished]['bbox'] = boxes
-        results[finished]['feat'] = features
-        if finished < length - 1:
-            results[finished+1]['roi'] = pred_boxes
-        finished += 1
+        results[anchor]['bbox'] = boxes
+        results[anchor]['feat'] = features
+        if anchor+1 < length:
+            results[anchor+1]['roi'] = pred_boxes
+        anchor += 1
     return results
