@@ -3,11 +3,12 @@
 
 from fast_rcnn.craft import im_detect
 from fast_rcnn.bbox_transform import bbox_transform_inv
-from vdetlib.utils.protocol import proto_load, proto_dump, frame_path_at, boxes_at_frame
+from vdetlib.utils.protocol import frame_path_at, boxes_at_frame
 from vdetlib.utils.timer import Timer
 from vdetlib.utils.common import imread
 import numpy as np
 import random
+import copy
 
 def _append_boxes(tracks, frame_id, boxes, scores):
     if not tracks:
@@ -118,6 +119,23 @@ def _update_track(tracks, pred_boxes, scores, features, track_index, frame_id):
                 if box['frame'] == frame_id + 1:
                     box['roi'] = pred_box.tolist()
                     break
+
+def _update_track_scores_boxes(tracks, scores, boxes, features, track_index, frame_id):
+    if features is not None:
+        for i, cls_scores, bbox, feat in zip(track_index, scores, boxes, features):
+            for box in tracks[i]:
+                if box['frame'] == frame_id:
+                    box['scores'] = cls_scores.tolist()
+                    box['bbox'] = bbox.tolist()
+                    box['feature'] = feat.tolist()
+                    break
+    else:
+        for i, cls_scores, bbox in zip(track_index, scores, boxes):
+            for box in tracks[i]:
+                if box['frame'] == frame_id:
+                    box['scores'] = cls_scores.tolist()
+                    box['bbox'] = bbox.tolist()
+                    break
 """
 - modified track_proto
 
@@ -164,11 +182,10 @@ def _batch_im_detect(net, im, rois, det_fun, batch_size):
     rois = np.asarray(rois)
     num_rois = len(rois)
     num_batches = int(np.ceil(float(num_rois) / batch_size))
-    for it in xrange(num_batches):
-        roi_batch = np.zeros((batch_size, 4), dtype=np.float32)
-        st = it * batch_size
-        ed = np.minimum((it+1)*batch_size, num_rois)
-        roi_batch[0:ed-st,:] = rois[st:ed,:]
+    rois_holder = np.tile(rois[0, :], (num_batches*batch_size, 1))
+    rois_holder[:num_rois, :] = rois
+    for j in xrange(num_batches):
+        roi_batch = rois_holder[j*batch_size:(j+1)*batch_size, :]
         s_batch, b_batch = det_fun(net, im, roi_batch)
         f_batch = net.blobs['global_pool'].data.copy().squeeze(axis=(2,3))
         # must copy() because of batches may overwrite each other
@@ -179,7 +196,7 @@ def _batch_im_detect(net, im, rois, det_fun, batch_size):
     boxes = np.vstack(boxes)[:num_rois]
     boxes = boxes.reshape((boxes.shape[0], -1, 4))[:num_rois]
     features = np.vstack(features)[:num_rois]
-    return scores, boxes, features
+    return scores.copy(), boxes.copy(), features.copy()
 
 def score_guided_box_merge(scores, boxes, scheme):
     if scheme == 'mean':
@@ -245,6 +262,45 @@ def roi_propagation(vid_proto, box_proto, net, det_fun=im_detect, scheme='max', 
     track_proto['tracks'] = tracks
     return track_proto
 
+def track_propagation(vid_proto, track_proto, net, det_fun=im_detect,
+        cls_indices=None, keep_feat=False, batch_size = 1024):
+    new_track_proto = {}
+    new_track_proto['video'] = vid_proto['video']
+    new_track_proto['method'] = 'track_propagation'
+    tracks = copy.copy(track_proto['tracks'])
+
+    for idx, frame in enumerate(vid_proto['frames'], start=1):
+        # Load the demo image
+        image_name = frame_path_at(vid_proto, frame['frame'])
+        im = imread(image_name)
+
+        # Detect all object classes and regress object bounds
+        # extract rois on the current frame
+        rois, track_index = _cur_rois(tracks, frame['frame'])
+        if len(rois) == 0: continue
+
+        timer = Timer()
+        timer.tic()
+
+        # scores: n x c, boxes: n x (c x 4)
+        scores, boxes, features = _batch_im_detect(net, im, rois,
+                                                   det_fun, batch_size)
+
+        if not keep_feat:
+            features = None
+        if cls_indices is not None:
+            scores = scores[:, cls_indices]
+            # scores normalization
+            scores = scores / np.sum(scores, axis=1, keepdims=True)
+
+        # update track scores and features
+        _update_track_scores_boxes(tracks, scores, boxes, features,
+            track_index, frame['frame'])
+        timer.toc()
+        print ('Frame {}: Detection took {:.3f}s for '
+               '{:d} object proposals').format(frame['frame'], timer.total_time, len(rois))
+    new_track_proto['tracks'] = tracks
+    return new_track_proto
 
 def tpn_test(vid_proto, box_proto, net, rnn_net, session, det_fun=im_detect, scheme='max', length=None,
         sample_rate=1, offset=0, cls_indices=None, batch_size=64):

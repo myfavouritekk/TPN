@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 
 import sys
-import os
 import os.path as osp
 code_root=osp.join(osp.dirname(__file__), '../..')
 sys.path.insert(0, osp.join(code_root, 'src'))
@@ -97,6 +96,7 @@ if __name__ == '__main__':
     if args.cfg_file is not None:
         cfg_from_file(args.cfg_file)
     cfg.DEDUP_BOXES = 0.0
+    cfg.GPU_ID = args.job_id - 1
 
     # Load models
     feature_net, rnn_net = load_models(args)
