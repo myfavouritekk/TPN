@@ -41,6 +41,9 @@ def parse_args():
     parser.add_argument('--bbox_std', dest='bbox_std',
                         help='the std of bbox',
                         default=None, type=str)
+    parser.add_argument('--num_per_batch', dest='num_per_batch',
+                        help='Number of boxes in each batch',
+                        default=32, type=int)
     restore = parser.add_mutually_exclusive_group()
     restore.add_argument('--weights', type=str, default=None,
         help='RNN trained models.')
@@ -64,13 +67,15 @@ def expend_bbox_targets(bbox_targets, class_label, mean, std, num_classes=31):
         expend_targets[class_label,:] = (bbox_targets
             - mean[class_label*4:(class_label+1)*4]) \
             / std[class_label*4:(class_label+1)*4]
-    return expend_targets.reshape((1,-1))
+    return expend_targets.flatten()[np.newaxis,:]
 
-def expend_bbox_weights(class_label, num_classes=31):
+def expend_bbox_weights(bbox_weights, class_label, num_classes=31):
+    bbox_weights = np.asarray(bbox_weights)
+    assert bbox_weights.shape == (1,4)
     expend_weights = np.zeros((num_classes, 4), dtype=np.float32)
     if class_label != 0 and class_label != -1:
-        expend_weights[class_label,:] = 1.
-    return expend_weights.reshape((1,-1))
+        expend_weights[class_label,:] = bbox_weights
+    return expend_weights.flatten()[np.newaxis,:]
 
 def load_data(config, debug=False):
     if config['blacklist']:
@@ -173,24 +178,26 @@ def process_track_results(track_res, bbox_means, bbox_stds):
     track_proto['tracks'] = tracks
     add_track_targets(track_proto, annot_proto, verbose=False)
 
+    tracks_proto = track_proto['tracks']
     # load data to RNN
-    # data
+    # data: t * (n * c) -> t * n * c
     feat = _pad_array(np.asarray(feat), track_length)
-    # cont
+    # cont: t * n
     cont = np.ones(feat.shape[:2])
     cont[0,:] = 0
-    # labels
+    # labels: t * n
     labels = np.asarray([[frame['class_label'] for frame in track] \
-        for track in track_proto['tracks']]).T.copy()
+        for track in tracks_proto]).T.copy()
     labels = _pad_array(labels, track_length, -1)
     # bbox_targets
     bbox_targets = np.asarray([[expend_bbox_targets(frame['bbox_target'],
             frame['class_label'], bbox_means, bbox_stds) for frame in track] \
-        for track in track_proto['tracks']]).squeeze(axis=2).swapaxes(0,1).copy()
+        for track in tracks_proto]).squeeze(axis=2).swapaxes(0,1).copy()
     bbox_targets = _pad_array(bbox_targets, track_length)
     # bbox_weights
-    bbox_weights = np.asarray([[expend_bbox_weights(frame['class_label']) for frame in track] \
-        for track in track_proto['tracks']]).squeeze(axis=2).swapaxes(0,1).copy()
+    bbox_weights = np.asarray([[expend_bbox_weights(frame['bbox_weight'],
+            frame['class_label']) for frame in track] \
+        for track in tracks_proto]).squeeze(axis=2).swapaxes(0,1).copy()
     bbox_weights = _pad_array(bbox_weights, track_length)
     return feat, cont, labels, bbox_targets, bbox_weights
 
@@ -263,7 +270,8 @@ if __name__ == '__main__':
             det_fun=im_detect,
             num_tracks=num_tracks,
             length=track_length,
-            fg_ratio=config['fg_ratio'])
+            fg_ratio=config['fg_ratio'],
+            batch_size=args.num_per_batch)
 
         if args.vis_debug:
             show_track_res(track_res, vid_proto)

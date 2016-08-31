@@ -37,6 +37,7 @@ def add_track_targets(track_proto, annot_proto, verbose=True):
             if frame_index >= max_gt_frame: # no gt as the end of video
                 box['class_label'] = 0
                 box['bbox_target'] = [[0, 0, 0, 0]]
+                box['bbox_weight'] = [[0, 0, 0, 0]]
                 continue
             roi = box['roi']
             overlaps = bbox_overlaps(
@@ -51,31 +52,43 @@ def add_track_targets(track_proto, annot_proto, verbose=True):
                     target_obj = max_obj
                     class_label = processed_annot['class_index'][target_obj, frame_index]
                     assert class_label != 0
+                    # why not calculate bbox target?
                 else:
                     # still on background
                     box['class_label'] = 0
                     box['bbox_target'] = [[0, 0, 0, 0]]
+                    box['bbox_weight'] = [[0, 0, 0, 0]]
                     continue
             assert target_obj != -1
             # if target disappears
             if processed_annot['exist'][target_obj, frame_index] == 0:
                 box['class_label'] = -1
                 box['bbox_target'] = [[0, 0, 0, 0]]
+                box['bbox_weight'] = [[0, 0, 0, 0]]
                 continue
 
             # target still exists
             target_box = processed_annot['bbox'][target_obj, :, frame_index]
-            box['bbox_target'] = bbox_transform(
-                np.asarray(roi, dtype=np.float)[np.newaxis,:],
-                target_box[np.newaxis, :]).tolist()
 
             target_overlap = overlaps[0,target_obj]
             if target_overlap >= 0.5: # still on target
                 box['class_label'] = int(class_label)
-            elif max_overlap >= 0.5: # drift to other objects
+                box['bbox_target'] = bbox_transform(
+                    np.asarray(roi, dtype=np.float)[np.newaxis,:],
+                    target_box[np.newaxis, :]).tolist()
+                box['bbox_weight'] = [[1 ,1 ,1 ,1]]
+            elif np.any(overlaps >= 0.5): # drift to other objects
                 box['class_label'] = -1 # ignore class label
+                box['bbox_target'] = [[0 ,0 ,0 ,0]]
+                box['bbox_weight'] = [[0 ,0 ,0 ,0]]
             else: # drift to background
                 box['class_label'] = 0
+                box['bbox_target'] = [[0 ,0 ,0 ,0]]
+                box['bbox_weight'] = [[0 ,0 ,0 ,0]]
+
+            box['target_object'] = target_obj
+            box['target_bbox'] = target_box
+            box['target_overlap'] = overlaps[0, target_obj]
 
         # Finnaly assign ending label
         # criteria: true if
