@@ -255,11 +255,12 @@ if __name__ == '__main__':
         track_length = config['track_length']
         num_tracks = config['track_per_vid']
         vid_name = vid_names[iter]
-        iter += pool_size
+        iter += 1
         if iter >= len(vid_names):
             print "Reach end of data, start over."
-            iter = iter % len(vid_names)
-        print "GPU {}: vid_name {}".format(mpi_rank, vid_name)
+            iter = 0
+        if args.debug:
+            print "GPU {}: vid_name {}".format(mpi_rank, vid_name)
 
         vid_proto = tot_data[vid_name]['vid']
         box_proto = tot_data[vid_name]['box']
