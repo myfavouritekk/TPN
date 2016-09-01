@@ -24,8 +24,9 @@ def _frame_dets(tracks, frame_idx, score_key, box_key):
             assert score_key in frame
             assert box_key in frame
             cur_scores = np.asarray(frame[score_key]).flatten()[np.newaxis,:]
-            cur_boxes = np.asarray(frame[box_key])[np.newaxis,:]
+            cur_boxes = np.asarray(frame[box_key]).flatten()[np.newaxis,:]
             num_cls = cur_scores.shape[1]
+            assert cur_boxes.shape[1] in [4, 4 * num_cls]
             # repeat boxes if not class specific
             if cur_boxes.shape[1] == 4:
                 cur_boxes = np.tile(cur_boxes, num_cls)
