@@ -4,15 +4,16 @@ import argparse
 import os
 import os.path as osp
 import glob
-from vdetlib.utils.protocol import proto_load
 import numpy as np
 import sys
+import cPickle
+from time import time
 this_dir = osp.dirname(__file__)
 sys.path.insert(0, osp.join(this_dir, '../../external/py-faster-rcnn/lib/'))
 sys.path.insert(0, osp.join(this_dir, '../../src'))
+sys.path.insert(0, osp.join(this_dir, '../../external/'))
+from vdetlib.utils.protocol import proto_load
 from fast_rcnn.nms_wrapper import nms
-import cPickle
-from time import time
 from tpn.evaluate import write_ilsvrc_results_file
 
 def _frame_dets(tracks, frame_idx, score_key, box_key):
@@ -30,10 +31,10 @@ def _frame_dets(tracks, frame_idx, score_key, box_key):
             # repeat boxes if not class specific
             if cur_boxes.shape[1] == 4:
                 cur_boxes = np.tile(cur_boxes, num_cls)
-            scores.append(cur_scores)
-            boxes.append(cur_boxes)
-    scores = np.concatenate(scores, 0)
-    boxes = np.concatenate(boxes, 0)
+            scores.append(cur_scores.copy())
+            boxes.append(cur_boxes.copy())
+    scores = np.vstack(scores)
+    boxes = np.vstack(boxes)
     return scores, boxes
 
 if __name__ == '__main__':
@@ -75,7 +76,8 @@ if __name__ == '__main__':
             if frame_name not in image_list.keys(): continue
 
             frame_idx = frame['frame']
-            global_idx = int(image_list[frame_name]) - 1
+            sub_idx = int(image_list[frame_name])
+            global_idx = sub_idx - 1
             start_time = time()
             scores, boxes = _frame_dets(track_proto['tracks'], frame_idx,
                 args.score_key, args.box_key)
@@ -101,7 +103,7 @@ if __name__ == '__main__':
                         keep = np.where(all_boxes[j][global_idx][:, -1] >= image_thresh)[0]
                         all_boxes[j][global_idx] = all_boxes[j][global_idx][keep, :]
             end_time = time()
-            print "{}/{}: {:.03f} s".format(global_idx + 1, len(image_list), end_time - start_time)
+            print "{}/{}: {:.03f} s".format(sub_idx, len(image_list), end_time - start_time)
             sys.stdout.flush()
 
     det_file = osp.join(args.output_dir, 'detections.pkl')
