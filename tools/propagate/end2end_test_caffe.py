@@ -42,6 +42,12 @@ def parse_args():
     parser.add_argument('--bbox_std', dest='bbox_std',
                         help='the std of bbox',
                         default=None, type=str)
+    parser.add_argument('--bbox_pred_layer', dest='bbox_pred_layer',
+                        help='Layer name for bbox regression layer in feature net.',
+                        default='bbox_pred_vid', type=str)
+    parser.add_argument('--rnn_bbox_pred_layer', dest='rnn_pred_layer',
+                        help='Layer name for bbox regression layer in rnn net.',
+                        default='bbox_pred_vid', type=str)
     parser.add_argument('--scheme', help='Propagation scheme. [weighted]',
                         choices=['max', 'mean', 'weighted'], default='weighted')
     parser.add_argument('--length', type=int, default=20,
@@ -110,14 +116,14 @@ if __name__ == '__main__':
         bbox_means = cPickle.load(f)
     with open(args.bbox_std, 'rb') as f:
         bbox_stds = cPickle.load(f)
-    feature_net.params['bbox_pred_vid'][0].data[...] = \
-        feature_net.params['bbox_pred_vid'][0].data * bbox_stds[:, np.newaxis]
-    feature_net.params['bbox_pred_vid'][1].data[...] = \
-        feature_net.params['bbox_pred_vid'][1].data * bbox_stds + bbox_means
-    rnn_net.params['bbox_pred_vid'][0].data[...] = \
-        rnn_net.params['bbox_pred_vid'][0].data * bbox_stds[:, np.newaxis]
-    rnn_net.params['bbox_pred_vid'][1].data[...] = \
-        rnn_net.params['bbox_pred_vid'][1].data * bbox_stds + bbox_means
+    feature_net.params[args.bbox_pred_layer][0].data[...] = \
+        feature_net.params[args.bbox_pred_layer][0].data * bbox_stds[:, np.newaxis]
+    feature_net.params[args.bbox_pred_layer][1].data[...] = \
+        feature_net.params[args.bbox_pred_layer][1].data * bbox_stds + bbox_means
+    rnn_net.params[args.rnn_pred_layer][0].data[...] = \
+        rnn_net.params[args.rnn_pred_layer][0].data * bbox_stds[:, np.newaxis]
+    rnn_net.params[args.rnn_pred_layer][1].data[...] = \
+        rnn_net.params[args.rnn_pred_layer][1].data * bbox_stds + bbox_means
 
     # End-to-end testing
     track_proto = tpn_caffe_test(vid_proto, box_proto, feature_net, rnn_net,
