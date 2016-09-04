@@ -99,22 +99,24 @@ def _cur_rois(tracks, frame_id):
                 break
     return rois, index
 
-def _update_track(tracks, pred_boxes, scores, features, track_index, frame_id):
+def _update_track(tracks, cls_boxes, pred_boxes, scores, features, track_index, frame_id):
     if features is not None:
-        for i, pred_box, cls_scores, feat in zip(track_index, pred_boxes, scores, features):
+        for i, cls_bbox, pred_box, cls_scores, feat in zip(track_index,
+                cls_boxes, pred_boxes, scores, features):
             for box in tracks[i]:
                 if box['frame'] == frame_id:
-                    box['bbox'] = pred_box.tolist()
+                    box['bbox'] = cls_bbox.tolist()
                     box['scores'] = cls_scores.tolist()
                     box['feature'] = feat.tolist()
                 if box['frame'] == frame_id + 1:
                     box['roi'] = pred_box.tolist()
                     break
     else:
-        for i, pred_box, cls_scores in zip(track_index, pred_boxes, scores):
+        for i, cls_bbox, pred_box, cls_scores in zip(track_index,
+                cls_boxes, pred_boxes, scores):
             for box in tracks[i]:
                 if box['frame'] == frame_id:
-                    box['bbox'] = pred_box.tolist()
+                    box['bbox'] = cls_bbox.tolist()
                     box['scores'] = cls_scores.tolist()
                 if box['frame'] == frame_id + 1:
                     box['roi'] = pred_box.tolist()
@@ -255,7 +257,7 @@ def roi_propagation(vid_proto, box_proto, net, det_fun=im_detect, scheme='max', 
         pred_boxes = score_guided_box_merge(scores, boxes, scheme)
 
         # update track bbox
-        _update_track(tracks, pred_boxes, scores, features, track_index, frame['frame'])
+        _update_track(tracks, boxes, pred_boxes, scores, features, track_index, frame['frame'])
         timer.toc()
         print ('Frame {}: Detection took {:.3f}s for '
                '{:d} object proposals').format(frame['frame'], timer.total_time, len(rois))
@@ -293,7 +295,7 @@ def track_propagation(vid_proto, track_proto, net, det_fun=im_detect,
             # scores normalization
             scores = scores / np.sum(scores, axis=1, keepdims=True)
 
-        # update track scores and features
+        # update track scores and boxes
         _update_track_scores_boxes(tracks, scores, boxes, features,
             track_index, frame['frame'])
         timer.toc()
