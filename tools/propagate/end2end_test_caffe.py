@@ -42,7 +42,7 @@ def parse_args():
     parser.add_argument('--bbox_std', dest='bbox_std',
                         help='the std of bbox',
                         default=None, type=str)
-    parser.add_argument('--bbox_pred_layer', dest='bbox_pred_layer',
+    parser.add_argument('--bbox_pred_layer',
                         help='Layer name for bbox regression layer in feature net.',
                         default='bbox_pred_vid', type=str)
     parser.add_argument('--rnn_bbox_pred_layer', dest='rnn_pred_layer',
