@@ -39,7 +39,8 @@ if __name__ == '__main__':
             cls_dir = osp.join(args.save_dir, '{:02d}'.format(cls))
             if not osp.isdir(cls_dir): os.makedirs(cls_dir)
             for img_path in results[cls]:
-                shutil.copyfile(img_path, cls_dir)
+                save_path = osp.join(cls_dir, '_'.join(img_path.split('/')[-2:]))
+                shutil.copyfile(img_path, save_path)
         else:
             with open(osp.join(args.save_dir,
                     '{:02d}.txt'.format(cls)), 'w') as f:
