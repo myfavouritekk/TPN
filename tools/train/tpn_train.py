@@ -259,7 +259,7 @@ if __name__ == '__main__':
         if iter >= len(vid_names):
             print "Reach end of data, start over."
             iter = 0
-        if args.debug:
+        if args.vis_debug:
             print "GPU {}: vid_name {}".format(mpi_rank, vid_name)
 
         vid_proto = tot_data[vid_name]['vid']
