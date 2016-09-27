@@ -151,7 +151,8 @@ def _pad_array(array, len_first_dim, value=0.):
     else:
         return array
 
-def process_track_results(track_res, bbox_means, bbox_stds):
+def process_track_results(track_res, vid_proto, annot_proto, bbox_means, bbox_stds
+    num_tracks):
     # calculate targets, generate dummy track_proto
     # track_res[0]:
     #   roi: n * 4
@@ -278,7 +279,8 @@ if __name__ == '__main__':
             show_track_res(track_res, vid_proto)
 
         feat, cont, labels, bbox_targets, bbox_weights = process_track_results(
-            track_res, bbox_means, bbox_stds)
+            track_res, vid_proto, annot_proto,
+            bbox_means, bbox_stds, num_tracks)
         rnn.blobs['data'].reshape(*(feat.shape))
         rnn.blobs['data'].data[...] = feat
         rnn.blobs['cont'].reshape(*(cont.shape))
