@@ -1,0 +1,32 @@
+init:
+    init_scale: 0.1
+    cls_init: ""
+    bbox_init: ""
+model:
+    type: "basic"
+    num_layers: 1
+    input_size: 2048
+    hidden_size: 2048
+    keep_prob: 1.0
+train:
+    learning_rate: 0.001
+    momentum: 0.9
+    max_grad_norm: 1.5
+    num_steps: 20
+    max_epoch: 10
+    iter_epoch: 2000
+    lr_decay: 0.5
+    vid_per_batch: 4
+    batch_size: 128
+    num_classes: 31
+    cls_weight: 1.0
+    bbox_weight: 1.0
+    ending_weight: 1.0
+test:
+    learning_rate: 0.0
+    max_grad_norm: 1
+    max_epoch: 1
+    max_max_epoch: 1
+    lr_decay: 1.0
+    batch_size: 1
+    num_steps: 20
