@@ -252,7 +252,8 @@ if __name__ == '__main__':
 
     # start training
     iter = mpi_rank
-    for i in xrange(max_iter):
+    st_iter = solver.iter
+    for i in xrange(max_iter - st_iter):
         track_length = config['track_length']
         num_tracks = config['track_per_vid']
         vid_name = vid_names[iter]
