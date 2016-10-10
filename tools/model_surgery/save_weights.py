@@ -7,6 +7,7 @@ sys.path.insert(0, osp.join(this_dir, '../../external/caffe-mpi/build/install/py
 import caffe
 import argparse
 import cPickle
+import numpy as np
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
