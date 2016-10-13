@@ -1,0 +1,8 @@
+source: ""
+bbox: ""
+gt: ""
+batch_size: 32
+bbox_mean: ""
+bbox_std: ""
+shuffle: true
+select_overlap: 0.5
