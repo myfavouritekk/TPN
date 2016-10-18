@@ -1,6 +1,7 @@
 source: ""
 bbox: ""
 gt: ""
+root: ""
 batch_size: 32
 bbox_mean: ""
 bbox_std: ""
