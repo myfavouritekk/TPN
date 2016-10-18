@@ -7,15 +7,16 @@ import scipy.io as sio
 import cPickle
 import cv2
 import random
-import fast_rcnn.config as cfg
+from fast_rcnn.config import cfg
 from fast_rcnn.bbox_transform import bbox_transform
 from utils.cython_bbox import bbox_overlaps
 from utils.blob import prep_im_for_blob, im_list_to_fixed_spatial_blob
 
-class PairROIDataLayer(caffe.layer):
+class PairROIDataLayer(caffe.Layer):
     """docstring for PairROIDataLayer"""
     def setup(self, bottom, top):
-        layer_params = yaml.load(self.param_str_)
+        with open(self.param_str) as f:
+            layer_params = yaml.load(f)
         self.config = layer_params
         # n image pairs
         with open(self.config['source']) as f:
@@ -23,13 +24,14 @@ class PairROIDataLayer(caffe.layer):
 
         # n cells containing bounding boxes
         self.bbox = sio.loadmat(self.config['bbox'])['bbox']
-        assert len(self.bbox == self.imagelist)
+        assert len(self.bbox) == len(self.imagelist)
         # n cells containing gt for both images
         self.gt = sio.loadmat(self.config['gt'])['gt']
-        assert len(self.gt == self.imagelist)
+        assert len(self.gt) == len(self.imagelist)
 
+        self.index = range(len(self.imagelist))
         if self.config['shuffle']:
-            self.index = random.shuffle(xrange(len(self.imagelist)))
+            random.shuffle(self.index)
         self.iter = 0
 
         with open(self.config['bbox_mean'], 'rb') as f:
@@ -51,6 +53,8 @@ class PairROIDataLayer(caffe.layer):
 
     def forward(self, bottom, top):
         index = self.index[self.iter]
+        print index
+        raise
         img_name1, img_name2 = self.imagelist[index]
         img1, scale = _image_preprocess(cv2.imread(img_name1))
         img2, __ = _image_preprocess(cv2.imread(img_name2))
