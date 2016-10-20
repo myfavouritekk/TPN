@@ -59,7 +59,7 @@ class PairROIDataProvider():
         ## bbox_weights
         #top[4].reshape(self.config['batch_size'], 4)
 
-    def forward(self):
+    def forward(self, step = 1):
         selected = False
         while not selected:
             index = self.index[self.iter]
@@ -73,9 +73,9 @@ class PairROIDataProvider():
             blobs = np.vstack((img1, img2))
             bboxes  = self.bbox[index][0][:,:4]
             gt1, gt2 = self.gt[index]
-            self.iter += 1
-            if self.iter == len(self.imagelist):
-                self.iter = 0
+            self.iter += step
+            if self.iter >= len(self.imagelist):
+                self.iter -= len(self.imagelist)
             if gt1.shape[0] > 0: selected = True
 
         # sample rois
