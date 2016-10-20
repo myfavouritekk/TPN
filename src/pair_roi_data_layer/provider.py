@@ -40,10 +40,10 @@ class PairROIDataProvider():
 
         with open(self.config['bbox_mean'], 'rb') as f:
             # TODO: real mean
-            bbox_mean = cPickle.load(f)
+            self.bbox_mean = cPickle.load(f)
         with open(self.config['bbox_std'], 'rb') as f:
             # TODO: real std
-            bbox_std = cPickle.load(f)
+            self.bbox_std = cPickle.load(f)
 
     def forward(self, step = 1):
         selected = False
