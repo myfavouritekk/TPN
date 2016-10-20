@@ -41,23 +41,9 @@ class PairROIDataProvider():
         with open(self.config['bbox_mean'], 'rb') as f:
             # TODO: real mean
             bbox_mean = cPickle.load(f)
-            self.bbox_mean = bbox_mean.reshape((-1,4))[1:].mean(0)
         with open(self.config['bbox_std'], 'rb') as f:
             # TODO: real std
             bbox_std = cPickle.load(f)
-            self.bbox_std = bbox_std.reshape((-1,4))[1:].mean(0)
-
-        ## setup shapes
-        ## image pair
-        #top[0].reshape(2, 3, cfg.TRAIN.MAX_SIZE, cfg.TRAIN.MAX_SIZE)
-        ## rois (img_idx, x1, y1, x2, y2)
-        #top[1].reshape(self.config['batch_size'] * 2, 5)
-        ## labels
-        #top[2].reshape(self.config['batch_size'], 1)
-        ## bbox_targets
-        #top[3].reshape(self.config['batch_size'], 4)
-        ## bbox_weights
-        #top[4].reshape(self.config['batch_size'], 4)
 
     def forward(self, step = 1):
         selected = False
