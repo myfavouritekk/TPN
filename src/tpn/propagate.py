@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # propagate bounding boxes
 
-from fast_rcnn.craft import im_detect, paired_im_detect
+from fast_rcnn.craft import im_detect, sequence_im_detect
 from fast_rcnn.bbox_transform import bbox_transform_inv
 from vdetlib.utils.protocol import frame_path_at, boxes_at_frame
 from vdetlib.utils.timer import Timer
@@ -493,7 +493,7 @@ def _paired_frames(vid_proto):
     assert len(vid_proto['frames']) >= 2
     return zip(vid_proto['frames'][:-1], vid_proto['frames'][1:])
 
-def paired_roi_propagation(vid_proto, box_proto, net, det_fun=paired_im_detect,
+def paired_roi_propagation(vid_proto, box_proto, net, det_fun=sequence_im_detect,
         scheme='max', length=None,
         sample_rate=1, offset=0, keep_feat=False,
         batch_size = 1024):
