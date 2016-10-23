@@ -23,7 +23,7 @@ import caffe
 
 # add py-faster-rcnn paths
 sys.path.insert(0, osp.join(this_dir, '../../external/py-faster-rcnn/lib'))
-from fast_rcnn.craft import im_detect
+from fast_rcnn.craft import sequence_im_detect
 from fast_rcnn.config import cfg, cfg_from_file, cfg_from_list
 
 # add external libs
@@ -74,8 +74,6 @@ def parse_args():
     parser.add_argument('--bbox_pred_layer', dest='bbox_pred_layer',
                         help='Layer name for bbox regression layer in feature net.',
                         default='bbox_pred_vid', type=str)
-    parser.add_argument('--scheme', help='Propagation scheme. [weighted]',
-                        choices=['max', 'mean', 'weighted'], default='weighted')
     parser.add_argument('--length', type=int, default=9,
                         help='Propagation length. [9]')
     parser.add_argument('--sample_rate', type=int, default=1,
@@ -143,7 +141,7 @@ if __name__ == '__main__':
     vid_proto = proto_load(args.vid_file)
     box_proto = proto_load(args.box_file)
 
-    track_proto = paired_roi_propagation(vid_proto, box_proto, net, im_detect, scheme=args.scheme,
+    track_proto = paired_roi_propagation(vid_proto, box_proto, net, sequence_im_detect,
         length=args.length, sample_rate=args.sample_rate,
         keep_feat=args.keep_feat, batch_size=args.boxes_num_per_batch)
 

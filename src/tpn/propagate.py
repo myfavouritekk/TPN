@@ -477,7 +477,7 @@ def _batch_paired_im_detect(net, im1, im2, rois, det_fun, batch_size):
     rois_holder[:num_rois, :] = rois
     for j in xrange(num_batches):
         roi_batch = rois_holder[j*batch_size:(j+1)*batch_size, :]
-        s_batch, b_batch = det_fun(net, im1, im2, roi_batch)
+        s_batch, b_batch = det_fun(net, [im1, im2], roi_batch)
         f_batch = net.blobs['global_pool'].data.copy().squeeze(axis=(2,3))
         # must copy() because of batches may overwrite each other
         scores.append(s_batch.copy())
@@ -485,7 +485,6 @@ def _batch_paired_im_detect(net, im1, im2, rois, det_fun, batch_size):
         features.append(f_batch.copy())
     scores = np.vstack(scores)[:num_rois]
     boxes = np.vstack(boxes)[:num_rois]
-    boxes = boxes.reshape((boxes.shape[0], -1, 4))[:num_rois]
     features = np.vstack(features)[:num_rois]
     return scores.copy(), boxes.copy(), features.copy()
 
@@ -522,16 +521,16 @@ def paired_roi_propagation(vid_proto, box_proto, net, det_fun=sequence_im_detect
         timer.tic()
 
         # scores: n x c, boxes: n x (c x 4)
-        scores, boxes = _batch_paired_im_detect(
+        scores, boxes, features = _batch_paired_im_detect(
             net, im1, im2, rois, det_fun, batch_size)
 
-        # propagation schemes
-        pred_boxes = bbox_transform_inv(rois, boxes_delta)
+        if not keep_feat:
+            features = None
 
         # update track bbox
-        _update_track(tracks, boxes, pred_boxes, scores, None, track_index, frame['frame'])
+        _update_track(tracks, boxes, boxes, scores, features, track_index, frame1['frame'])
         timer.toc()
         print ('Frame {}: Detection took {:.3f}s for '
-               '{:d} object proposals').format(frame['frame'], timer.total_time, len(rois))
+               '{:d} object proposals').format(frame1['frame'], timer.total_time, len(rois))
     track_proto['tracks'] = tracks
     return track_proto
