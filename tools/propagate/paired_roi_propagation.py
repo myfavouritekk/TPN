@@ -103,6 +103,10 @@ if __name__ == '__main__':
     print 'Called with args:'
     print args
 
+    if osp.isfile(args.save_file):
+        print "{} already exists.".format(args.save_file)
+        sys.exit(1)
+
     if args.cfg_file is not None:
         cfg_from_file(args.cfg_file)
     if args.set_cfgs is not None:
