@@ -19,9 +19,13 @@ if __name__ == '__main__':
 
     deltas = []
     gts = sio.loadmat(args.paired_gt_file)['gt']
-    for gt1, gt2 in gts:
+    for track_gts in gts:
+        gt1 = track_gts[0]
         if len(gt1) == 0: continue
-        deltas.append(bbox_transform(gt1, gt2))
+        cur_deltas = []
+        for gt in track_gts[1:]:
+            cur_deltas.append(bbox_transform(gt1, gt))
+        deltas.append(np.hstack(cur_deltas))
     delta = np.vstack(deltas)
     mean = np.mean(delta, axis=0)
     std = np.std(delta, axis=0)

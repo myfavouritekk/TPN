@@ -12,7 +12,7 @@ if __name__ == '__main__':
     with open(args.select_list) as f:
         selections = [line.strip().split()[0] for line in f]
     # remove .JPEG
-    # selections = [img[:-5] for img in selections]
+    selections = [img[:-5] for img in selections]
     mat = sio.loadmat(args.proposal_file)
     boxes = mat['boxes']
     imgs = mat['images']

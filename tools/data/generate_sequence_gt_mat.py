@@ -4,6 +4,7 @@ import scipy.io as sio
 import xmltodict
 import os.path as osp
 import numpy as np
+from functools import reduce
 
 def load_gt(xml_file):
     res = []
@@ -39,18 +40,25 @@ if __name__ == '__main__':
     with open(args.img_list) as f:
         img_list = [line.strip().split() for line in f]
     res = []
-    for img1, img2 in img_list:
-        gt1 = load_gt(osp.join(args.gt_root, img1[:-5] + '.xml'))
-        gt2 = load_gt(osp.join(args.gt_root, img2[:-5] + '.xml'))
-        try:
-            track_id1 = gt1[:,-1]
-            track_id2 = gt2[:,-1]
-        except IndexError:
-            res.append([[],[]])
-            continue
-        select_track_id = np.intersect1d(track_id1, track_id2)
-        indx1 = [track_id1.tolist().index(track_idx) for track_idx in select_track_id]
-        indx2 = [track_id2.tolist().index(track_idx) for track_idx in select_track_id]
-        res.append([gt1[indx1,:4], gt2[indx2,:4]])
+    for img_paths in img_list:
+        track_ids = []
+        gts = []
+        for img_path in img_paths:
+            gt = load_gt(osp.join(args.gt_root, img_path[:-5] + '.xml'))
+            gts.append(gt)
+            try:
+                track_ids.append(gt[:,-1])
+            except IndexError:
+                track_ids.append([])
+        select_track_id = reduce(np.intersect1d, track_ids)
+        cur_res = []
+        assert len(gts) == len(track_ids)
+        for track_id, gt in zip(track_ids, gts):
+            cur_indices = [track_id.tolist().index(track_idx) for track_idx in select_track_id]
+            if cur_indices:
+                cur_res.append(gt[cur_indices,:4])
+            else:
+                cur_res.append([])
+        res.append(cur_res)
     sio.savemat(args.save_file, {'gt': res}, do_compression=True)
 
