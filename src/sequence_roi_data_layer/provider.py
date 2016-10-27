@@ -13,8 +13,8 @@ from fast_rcnn.bbox_transform import bbox_transform
 from utils.cython_bbox import bbox_overlaps
 from utils.blob import prep_im_for_blob, im_list_to_fixed_spatial_blob
 
-class PairROIDataProvider():
-    """docstring for PairROIDataLayer"""
+class SequenceROIDataProvider():
+    """docstring for SequenceROIDataLayer"""
     def __init__(self, param_str):
         self.param_str = param_str
 
@@ -24,6 +24,7 @@ class PairROIDataProvider():
         # n image pairs
         with open(self.config['source']) as f:
             self.imagelist = [line.strip().split() for line in f]
+        self.length = len(self.imagelist[0])
         self.root_dir = self.config['root']
 
         # n cells containing bounding boxes
@@ -39,34 +40,32 @@ class PairROIDataProvider():
         self.iter = 0
 
         with open(self.config['bbox_mean'], 'rb') as f:
-            # TODO: real mean
             self.bbox_mean = cPickle.load(f)
         with open(self.config['bbox_std'], 'rb') as f:
-            # TODO: real std
             self.bbox_std = cPickle.load(f)
 
     def forward(self, step = 1):
         selected = False
         while not selected:
             index = self.index[self.iter]
-            img_name1, img_name2 = self.imagelist[index]
-            img_path1 = osp.join(self.root_dir, img_name1)
-            img_path2 = osp.join(self.root_dir, img_name2)
-            assert osp.isfile(img_path1)
-            assert osp.isfile(img_path2)
-            img1, scale = _get_image_blob(cv2.imread(img_path1))
-            img2, __ = _get_image_blob(cv2.imread(img_path2))
-            blobs = np.vstack((img1, img2))
+            img_names = self.imagelist[index]
+            proc_imgs = []
+            for img_name in img_names:
+                img_path = osp.join(self.root_dir, img_name)
+                assert osp.isfile(img_path)
+                proc_img, scale = _get_image_blob(cv2.imread(img_path))
+                proc_imgs.append(proc_img)
+            blobs = np.vstack(proc_imgs)
             bboxes  = self.bbox[index][0][:,:4]
-            gt1, gt2 = self.gt[index]
+            gts = self.gt[index]
             self.iter += step
             if self.iter >= len(self.imagelist):
                 self.iter -= len(self.imagelist)
-            if gt1.shape[0] > 0: selected = True
+            if gts[0].shape[0] > 0: selected = True
 
         # sample rois
         overlaps = bbox_overlaps(np.require(bboxes, dtype=np.float),
-                                 np.require(gt1, dtype=np.float))
+                                 np.require(gts[0], dtype=np.float))
         gt_assignment = overlaps.argmax(axis=1)
         max_overlaps = overlaps.max(axis=1)
 
@@ -94,18 +93,24 @@ class PairROIDataProvider():
 
         # n * 1 * 4
         rois = bboxes[keep_ids][:,np.newaxis,:]
-        rois = np.tile(rois, (1, 2, 1))
+        rois = np.tile(rois, (1, self.length, 1))
         rois  = rois * scale # scale rois to match image scale
-        assignment = np.zeros((self.config['batch_size'], 2, 1), dtype=np.float)
-        assignment[:,1,:] = 1
+        assignment = np.tile(np.arange(self.length), (self.config['batch_size'], 1))[:,:,np.newaxis]
         rois = np.concatenate((assignment, rois), axis=2).reshape((-1, 5))
 
         # compute targets and weights
-        bbox_targets = bbox_transform(gt1[gt_assignment[keep_ids]],
-                                          gt2[gt_assignment[keep_ids]])
+        bbox_targets = []
+        bbox_weights = []
+        for gt in gts[1:]:
+            cur_bbox_targets = bbox_transform(gts[0][gt_assignment[keep_ids]],
+                                              gt[gt_assignment[keep_ids]])
+            cur_bbox_weights = np.zeros_like(cur_bbox_targets)
+            cur_bbox_weights[labels.flatten().astype('bool'), ...] = 1
+            bbox_targets.append(cur_bbox_targets)
+            bbox_weights.append(cur_bbox_weights)
+        bbox_targets = np.hstack(bbox_targets)
+        bbox_weights = np.hstack(bbox_weights)
         bbox_targets = (bbox_targets - self.bbox_mean) / self.bbox_std
-        bbox_weights = np.zeros_like(bbox_targets)
-        bbox_weights[labels.flatten().astype('bool'), ...] = 1
 
         return blobs, rois, labels, bbox_targets, bbox_weights
 
