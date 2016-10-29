@@ -20,7 +20,7 @@ from vdetlib.utils.protocol import proto_load, frame_path_at
 from vdetlib.utils.common import imread
 from vdetlib.utils.visual import add_bbox
 sys.path.insert(0, osp.join(this_dir, '../../src'))
-from pair_roi_data_layer.provider import PairROIDataProvider
+from sequence_roi_data_layer.provider import SequenceROIDataProvider
 import numpy as np
 import cPickle
 import random
@@ -31,29 +31,16 @@ def parse_args():
     parser.add_argument('solver')
     parser.add_argument('--train_cfg')
     parser.add_argument('--rcnn_cfg', default=None)
-    parser.add_argument('--data_layer')
-    parser.add_argument('--debug', action='store_true')
-    parser.add_argument('--vis_debug', action='store_true')
-    parser.add_argument('--bbox_mean', dest='bbox_mean',
-                        help='the mean of bbox',
-                        default=None, type=str)
-    parser.add_argument('--bbox_std', dest='bbox_std',
-                        help='the std of bbox',
-                        default=None, type=str)
-    parser.add_argument('--num_per_batch', dest='num_per_batch',
-                        help='Number of boxes in each batch',
-                        default=32, type=int)
     restore = parser.add_mutually_exclusive_group()
     restore.add_argument('--weights', type=str, default=None,
         help='RNN trained models.')
     restore.add_argument('--snapshot', type=str, default=None,
         help='RNN solverstates.')
-    parser.set_defaults(debug=False, vis_debug=False)
     args = parser.parse_args()
     return args
 
 def load_data(config_file):
-    provider = PairROIDataProvider(config_file)
+    provider = SequenceROIDataProvider(config_file)
     return provider
 
 def load_nets(args, cur_gpu):
@@ -68,6 +55,7 @@ def load_nets(args, cur_gpu):
         solver.restore(args.snapshot)
     net = solver.net
     if args.weights:
+        print "Copying weights from {}".format(args.weights)
         net.copy_from(args.weights)
 
     return solver, net
