@@ -9,6 +9,8 @@ from vdetlib.utils.common import imread
 import numpy as np
 import random
 import copy
+import math
+import itertools
 
 def _append_boxes(tracks, frame_id, boxes, scores):
     if not tracks:
@@ -122,6 +124,14 @@ def _update_track(tracks, cls_boxes, pred_boxes, scores, features, track_index, 
                     box['roi'] = pred_box.tolist()
                     break
 
+def _update_track_by_key(tracks, key, values, track_index, frame_id):
+    assert len(values) == len(track_index)
+    for i, single_value in zip(track_index, values):
+        for box in tracks[i]:
+            if box['frame'] == frame_id:
+                box[key] = single_value
+                break
+
 def _update_track_scores_boxes(tracks, scores, boxes, features, track_index, frame_id):
     if features is not None:
         for i, cls_scores, bbox, feat in zip(track_index, scores, boxes, features):
@@ -225,8 +235,7 @@ def roi_propagation(vid_proto, box_proto, net, det_fun=im_detect, scheme='max', 
     track_proto['method'] = 'roi_propagation'
     max_frame = vid_proto['frames'][-1]['frame']
     if not length: length = max_frame
-    tracks = _box_proto_to_track(box_proto, max_frame, length, sample_rate,
-                offset)
+    tracks = _box_proto_to_track(box_proto, max_frame, length, sample_rate, offset)
 
     for idx, frame in enumerate(vid_proto['frames'], start=1):
         # Load the demo image
@@ -464,7 +473,7 @@ def roi_train_propagation(vid_proto, box_proto, net, det_fun=im_detect,
         anchor += 1
     return results
 
-def _batch_paired_im_detect(net, im1, im2, rois, det_fun, batch_size):
+def _batch_sequence_im_detect(net, imgs, rois, det_fun, batch_size):
     # scores: n x c, boxes: n x (c x 4)
     scores = []
     boxes = []
@@ -477,7 +486,7 @@ def _batch_paired_im_detect(net, im1, im2, rois, det_fun, batch_size):
     rois_holder[:num_rois, :] = rois
     for j in xrange(num_batches):
         roi_batch = rois_holder[j*batch_size:(j+1)*batch_size, :]
-        s_batch, b_batch = det_fun(net, [im1, im2], roi_batch)
+        s_batch, b_batch = det_fun(net, imgs, roi_batch)
         f_batch = net.blobs['global_pool'].data.copy().squeeze(axis=(2,3))
         # must copy() because of batches may overwrite each other
         scores.append(s_batch.copy())
@@ -488,49 +497,72 @@ def _batch_paired_im_detect(net, im1, im2, rois, det_fun, batch_size):
     features = np.vstack(features)[:num_rois]
     return scores.copy(), boxes.copy(), features.copy()
 
-def _paired_frames(vid_proto):
-    assert len(vid_proto['frames']) >= 2
-    return zip(vid_proto['frames'][:-1], vid_proto['frames'][1:])
+def _sequence_frames(vid_proto, window):
+    vid_len = len(vid_proto['frames'])
+    n = int(math.ceil((vid_len - 1.) / (window - 1)))
+    tot_length = n * (window - 1) + 1
+    frames = vid_proto['frames']
+    frames += (tot_length - vid_len) * [frames[-1]]
+    seq_frames = []
+    for i in xrange(n):
+        seq_frames.append(frames[i*(window-1):i*(window-1)+window])
+    return seq_frames
 
-def paired_roi_propagation(vid_proto, box_proto, net, det_fun=sequence_im_detect,
+def sequence_roi_propagation(vid_proto, box_proto, net, det_fun=sequence_im_detect,
+        window=2,
         scheme='max', length=None,
         sample_rate=1, offset=0, keep_feat=False,
         batch_size = 1024):
     track_proto = {}
     track_proto['video'] = vid_proto['video']
-    track_proto['method'] = 'paired_roi_propagation'
+    track_proto['method'] = 'sequence_roi_propagation'
     max_frame = vid_proto['frames'][-1]['frame']
     if not length: length = max_frame
-    tracks = _box_proto_to_track(box_proto, max_frame, length, sample_rate,
-                offset)
+    tracks = _box_proto_to_track(box_proto, max_frame, length, sample_rate, offset)
 
-    paired_frames = _paired_frames(vid_proto)
-    for idx, (frame1, frame2) in enumerate(paired_frames, start=1):
+    sequence_frames = _sequence_frames(vid_proto, window)
+    for idx, frames in enumerate(sequence_frames, start=1):
         # Load the demo image
-        image_name1 = frame_path_at(vid_proto, frame1['frame'])
-        im1 = imread(image_name1)
-        image_name2 = frame_path_at(vid_proto, frame2['frame'])
-        im2 = imread(image_name2)
+        images = map(lambda x: imread(frame_path_at(vid_proto, x['frame'])), frames)
 
         # Detect all object classes and regress object bounds
         # extract rois on the current frame
-        rois, track_index = _cur_rois(tracks, frame1['frame'])
+        rois, track_index = _cur_rois(tracks, frames[0]['frame'])
         if len(rois) == 0: continue
 
         timer = Timer()
         timer.tic()
 
-        # scores: n x c, boxes: n x (c x 4)
-        scores, boxes, features = _batch_paired_im_detect(
-            net, im1, im2, rois, det_fun, batch_size)
+        # scores: n x 2, boxes: n x ((len-1) x 4), features: n x (len x f)
+        scores, boxes, features = _batch_sequence_im_detect(
+            net, images, rois, det_fun, batch_size)
 
         if not keep_feat:
             features = None
 
         # update track bbox
-        _update_track(tracks, boxes, boxes, scores, features, track_index, frame1['frame'])
+        boxes = boxes.reshape((len(rois), len(images)-1, 4))
+        if keep_feat:
+            features = features.reshape((len(rois), len(images), -1))
+        frame_ids = [frame['frame'] for frame in frames]
+        prev_id = -1
+        for i in xrange(len(images)):
+            frame_id = frames[i]['frame']
+            # stop when encounting duplicate frames
+            if frame_id == prev_id:
+                break
+            prev_id = frame_id
+            if i == 0:
+                _update_track_by_key(tracks, 'bbox', rois, track_index, frame_id)
+            else:
+                # minus 1 because boxes[0] correspond to the second frame
+                _update_track_by_key(tracks, 'bbox', boxes[:,i-1,:].tolist(), track_index, frame_id)
+                _update_track_by_key(tracks, 'roi', boxes[:,i-1,:].tolist(), track_index, frame_id)
+            if keep_feat:
+                _update_track_by_key(tracks, 'feature', features[:,i,:].tolist(), track_index, frame_id)
         timer.toc()
-        print ('Frame {}: Detection took {:.3f}s for '
-               '{:d} object proposals').format(frame1['frame'], timer.total_time, len(rois))
+        print ('Frame {}-{}: Detection took {:.3f}s for '
+               '{:d} object proposals').format(frame_ids[0], frame_ids[-1], timer.total_time, len(rois))
     track_proto['tracks'] = tracks
     return track_proto
+

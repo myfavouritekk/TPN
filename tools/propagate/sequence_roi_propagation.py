@@ -32,7 +32,7 @@ from vdetlib.utils.protocol import proto_load, proto_dump
 
 # add src libs
 sys.path.insert(0, osp.join(this_dir, '../../src'))
-from tpn.propagate import paired_roi_propagation
+from tpn.propagate import sequence_roi_propagation
 from tpn.target import add_track_targets
 from tpn.data_io import save_track_proto_to_zip
 
@@ -145,7 +145,9 @@ if __name__ == '__main__':
     vid_proto = proto_load(args.vid_file)
     box_proto = proto_load(args.box_file)
 
-    track_proto = paired_roi_propagation(vid_proto, box_proto, net, sequence_im_detect,
+    window = net.params[args.bbox_pred_layer][0].data.shape[0] / 4 + 1
+    track_proto = sequence_roi_propagation(vid_proto, box_proto, net, sequence_im_detect,
+        window = window,
         length=args.length, sample_rate=args.sample_rate,
         keep_feat=args.keep_feat, batch_size=args.boxes_num_per_batch)
 
