@@ -55,7 +55,9 @@ def _accuracy(track, gt):
         # target is the first track_bbox with gt motion
         track_bbox_target = bbox_transform_inv(track_bbox1, gt_delta)
         abs_diff = np.abs(track_bbox - track_bbox_target)
-        rel_diff = abs_diff / (track_bbox_target + np.finfo(float).eps)
+        width = track_bbox_target[0,2] - track_bbox_target[0,0]
+        height = track_bbox_target[0,3] - track_bbox_target[0,1]
+        rel_diff = abs_diff / (np.asarray([width, height, width, height]) + np.finfo(float).eps)
         abs_acc.extend(abs_diff.flatten().tolist())
         rel_acc.extend(rel_diff.flatten().tolist())
     return abs_acc, rel_acc
@@ -79,7 +81,9 @@ if __name__ == '__main__':
         frame1_id = track[0]['frame']
         annots = annots_at_frame(annot_proto, frame1_id)
         annot_boxes = [annot[0]['bbox'] for annot in annots]
-        gt_overlaps = iou([track[0]['bbox']], annot_boxes)
+        if len(annot_boxes) == 0:
+            continue
+        gt_overlaps = iou([track[0]['roi']], annot_boxes)
         max_overlap = np.max(gt_overlaps, axis=1)
         if max_overlap < args.overlap: continue
         max_gt = np.argmax(gt_overlaps, axis=1)[0]
