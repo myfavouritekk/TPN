@@ -16,3 +16,5 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     proto = proto_load(args.proto_file)
+    save_track_proto_to_zip(proto, args.save_zip)
+

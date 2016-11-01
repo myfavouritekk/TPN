@@ -20,12 +20,17 @@ import random
 def save_track_proto_to_zip(track_proto, save_file):
     zf = zipfile.ZipFile(save_file, 'w', allowZip64=True)
     print "Writing to zip file {}...".format(save_file)
-    for track_id, track in enumerate(track_proto['tracks']):
+    track_id = 0
+    for track in track_proto['tracks']:
         track_obj = {}
         for key in track[0]:
-            track_obj[key] = np.asarray([box[key] for box in track])
+            try:
+                track_obj[key] = np.asarray([box[key] for box in track])
+            except KeyError:
+                continue
         zf.writestr('{:06d}.pkl'.format(track_id),
             cPickle.dumps(track_obj, cPickle.HIGHEST_PROTOCOL))
+        track_id += 1
         if (track_id + 1) % 1000 == 0:
             print "\t{} tracks written.".format(track_id + 1)
     print "\tTotally {} tracks written.".format(track_id + 1)
