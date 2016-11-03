@@ -497,15 +497,19 @@ def _batch_sequence_im_detect(net, imgs, rois, det_fun, batch_size):
     features = np.vstack(features)[:num_rois]
     return scores.copy(), boxes.copy(), features.copy()
 
-def _sequence_frames(vid_proto, window):
+def _sequence_frames(vid_proto, window, track_anchors, length):
+    # index is frame_id - 1
+    anchor_idx = [anchor - 1 for anchor in track_anchors]
     vid_len = len(vid_proto['frames'])
-    n = int(math.ceil((vid_len - 1.) / (window - 1)))
-    tot_length = n * (window - 1) + 1
-    frames = vid_proto['frames']
-    frames += (tot_length - vid_len) * [frames[-1]]
+    n_per_track = int(math.ceil((length - 1.) / (window - 1)))
     seq_frames = []
-    for i in xrange(n):
-        seq_frames.append(frames[i*(window-1):i*(window-1)+window])
+    frames = vid_proto['frames']
+    frames += window * [frames[-1]]
+    step = window - 1
+    for st_idx in anchor_idx:
+        assert frames[st_idx]['frame'] in track_anchors
+        for i in xrange(n_per_track):
+            seq_frames.append(frames[st_idx+i*step:st_idx+i*step+window])
     return seq_frames
 
 def sequence_roi_propagation(vid_proto, box_proto, net, det_fun=sequence_im_detect,
@@ -520,7 +524,9 @@ def sequence_roi_propagation(vid_proto, box_proto, net, det_fun=sequence_im_dete
     if not length: length = max_frame
     tracks = _box_proto_to_track(box_proto, max_frame, length, sample_rate, offset)
 
-    sequence_frames = _sequence_frames(vid_proto, window)
+    track_anchors = sorted(set([track[0]['frame'] for track in tracks]))
+    sequence_frames = _sequence_frames(vid_proto, window,
+        track_anchors, length)
     for idx, frames in enumerate(sequence_frames, start=1):
         # Load the demo image
         images = map(lambda x: imread(frame_path_at(vid_proto, x['frame'])), frames)
