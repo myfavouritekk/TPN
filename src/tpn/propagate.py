@@ -503,13 +503,17 @@ def _sequence_frames(vid_proto, window, track_anchors, length):
     vid_len = len(vid_proto['frames'])
     n_per_track = int(math.ceil((length - 1.) / (window - 1)))
     seq_frames = []
-    frames = vid_proto['frames']
+    frames = copy.copy(vid_proto['frames'])
     frames += window * [frames[-1]]
     step = window - 1
     for st_idx in anchor_idx:
         assert frames[st_idx]['frame'] in track_anchors
         for i in xrange(n_per_track):
-            seq_frames.append(frames[st_idx+i*step:st_idx+i*step+window])
+            cur_st = st_idx+i*step
+            cur_ed = st_idx+i*step+window
+            if cur_st >= vid_len:
+                break
+            seq_frames.append(frames[cur_st:cur_ed])
     return seq_frames
 
 def sequence_roi_propagation(vid_proto, box_proto, net, det_fun=sequence_im_detect,
