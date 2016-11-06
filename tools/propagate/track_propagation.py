@@ -34,6 +34,7 @@ from vdetlib.utils.protocol import proto_load, proto_dump
 sys.path.insert(0, osp.join(this_dir, '../../src'))
 from tpn.propagate import track_propagation
 from tpn.target import add_track_targets
+from tpn.data_io import save_track_proto_to_zip
 
 def parse_args():
     """
@@ -73,7 +74,11 @@ def parse_args():
     parser.add_argument('--wait', dest='wait',
                         help='wait until net file exists',
                         default=True, type=bool)
-    parser.set_defaults(vis=False)
+    parser.add_argument('--zip', action='store_true',
+                        help='Save as zip files rather than track protocols')
+    parser.add_argument('--keep_feat', action='store_true',
+                        help='Keep features in the zip file.')
+    parser.set_defaults(vis=False, zip=False, keep_feat=False)
 
     if len(sys.argv) == 1:
         parser.print_help()
@@ -123,11 +128,14 @@ if __name__ == '__main__':
     track_proto = proto_load(args.track_file)
 
     new_track_proto = track_propagation(vid_proto, track_proto, net, im_detect,
-        keep_feat=False, batch_size=args.boxes_num_per_batch)
+        keep_feat=args.keep_feat, batch_size=args.boxes_num_per_batch)
 
     # add ground truth targets if annotation file is given
     if args.annot_file is not None:
         annot_proto = proto_load(args.annot_file)
-        add_track_targets(track_proto, annot_proto)
+        add_track_targets(new_track_proto, annot_proto)
 
-    proto_dump(new_track_proto, args.save_file)
+    if args.zip:
+        save_track_proto_to_zip(new_track_proto, args.save_file)
+    else:
+        proto_dump(new_track_proto, args.save_file)
