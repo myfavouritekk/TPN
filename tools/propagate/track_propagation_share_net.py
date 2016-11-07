@@ -34,6 +34,7 @@ from vdetlib.utils.protocol import proto_load, proto_dump
 sys.path.insert(0, osp.join(this_dir, '../../src'))
 from tpn.propagate import track_propagation
 from tpn.target import add_track_targets
+from tpn.data_io import save_track_proto_to_zip
 
 def parse_args():
     """
@@ -74,7 +75,11 @@ def parse_args():
     parser.add_argument('--wait', dest='wait',
                         help='wait until net file exists',
                         default=True, type=bool)
-    parser.set_defaults(vis=False)
+    parser.add_argument('--zip', action='store_true',
+                        help='Save as zip files rather than track protocols')
+    parser.add_argument('--keep_feat', action='store_true',
+                        help='Keep features in the zip file.')
+    parser.set_defaults(vis=False, zip=False, keep_feat=False)
 
     if len(sys.argv) == 1:
         parser.print_help()
@@ -120,7 +125,7 @@ if __name__ == '__main__':
     net.params['bbox_pred_vid'][1].data[...] = \
         net.params['bbox_pred_vid'][1].data * bbox_stds + bbox_means
 
-    with open(args.video_list) as f:
+    with open(args.vid_list) as f:
         vid_list = [line.strip() for line in f]
     for vid in vid_list:
         save_file = osp.join(args.save_dir, vid+'.track')
