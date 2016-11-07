@@ -16,6 +16,7 @@ import glog as log
 from model import TPNModel
 import yaml
 from easydict import EasyDict as edict
+from collections import deque
 
 flags = tf.flags
 logging = tf.logging
@@ -37,7 +38,9 @@ def run_epoch(session, m, data, eval_op, init_state, epoch_idx, verbose=False):
   bbox_costs = 0.0
   end_costs = 0.0
   display_iter = 20.
+  smooth_iter = 100
   state = init_state
+  smooth_loss = deque()
   for step in xrange(m.iter_epoch):
     x, cls_t, end_t, bbox_t, bbox_weights = tpn_iterator(data, m.batch_size, m.num_steps, m.num_classes, m.vid_per_batch)
     data_time = time.time()
@@ -54,12 +57,16 @@ def run_epoch(session, m, data, eval_op, init_state, epoch_idx, verbose=False):
     cls_costs += cls_cost
     bbox_costs += bbox_cost
     end_costs += end_cost
+    smooth_loss.append(cost)
+    if len(smooth_loss) > smooth_iter:
+        smooth_loss.popleft()
 
     if verbose and (step + 1) % display_iter == 0:
       costs /= display_iter
       cls_costs /= display_iter
       bbox_costs /= display_iter
       end_costs /= display_iter
+      log.info("Iter {:06d} Average loss: {:.03f}".format(step+1+epoch_idx * m.iter_epoch, sum(smooth_loss) / len(smooth_loss)))
       log.info("Iter {:06d} {:.03f} s/iter data time: {:.03f} s: cost {:.03f} = cls_cost {:.03f} * {:.02f} + end_cost {:.03f} * {:.02f} + bbox_cost {:.03f} * {:.02f}. Global norm: {:.03f}".format(
         step+1+epoch_idx * m.iter_epoch,
         (time.time() - start_time) / display_iter,
@@ -93,10 +100,6 @@ def main(_):
   config = get_config('train')
   eval_config = get_config('test')
 
-  log.info("Processing data...")
-  raw_data = tpn_raw_data(FLAGS.data_path)
-  train_data, valid_data = raw_data
-
   #tf.set_random_seed(1017)
   with tf.Graph().as_default(), tf.Session() as session:
     initializer = tf.random_uniform_initializer(-config.init_scale,
@@ -110,6 +113,10 @@ def main(_):
 
     saver = tf.train.Saver()
     for i in range(config.max_epoch):
+      log.info("New epoch {}: processing data...".format(i+1))
+      raw_data = tpn_raw_data(FLAGS.data_path)
+      train_data, valid_data = raw_data
+
       lr_decay = config.lr_decay ** i
       m.assign_lr(session, config.learning_rate * lr_decay)
 
