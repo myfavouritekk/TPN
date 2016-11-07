@@ -144,7 +144,7 @@ if __name__ == '__main__':
             track_proto = proto_load(track_file)
 
             new_track_proto = track_propagation(vid_proto, track_proto, net, im_detect,
-                keep_feat=False, batch_size=args.boxes_num_per_batch)
+                keep_feat=args.keep_feat, batch_size=args.boxes_num_per_batch)
 
             # add ground truth targets if annotation file is given
             if args.annot_dir is not None:
