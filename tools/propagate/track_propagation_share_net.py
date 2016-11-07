@@ -128,30 +128,34 @@ if __name__ == '__main__':
     with open(args.vid_list) as f:
         vid_list = [line.strip() for line in f]
     for vid in vid_list:
-        save_file = osp.join(args.save_dir, vid+'.track')
-        if args.zip:
-            save_file += '.zip'
-        else:
-            save_file += '.pkl'
-        if osp.isfile(save_file):
-            print "{} already exists.".format(save_file)
-            continue
-        vid_file = osp.join(args.vid_dir, vid+'.vid')
-        track_file = osp.join(args.track_dir, vid+'.track')
-        vid_proto = proto_load(vid_file)
-        track_proto = proto_load(track_file)
+        print "Processing {}".format(vid)
+        try:
+            save_file = osp.join(args.save_dir, vid+'.track')
+            if args.zip:
+                save_file += '.zip'
+            else:
+                save_file += '.pkl'
+            if osp.isfile(save_file):
+                print "{} already exists.".format(save_file)
+                continue
+            vid_file = osp.join(args.vid_dir, vid+'.vid')
+            track_file = osp.join(args.track_dir, vid+'.track')
+            vid_proto = proto_load(vid_file)
+            track_proto = proto_load(track_file)
 
-        new_track_proto = track_propagation(vid_proto, track_proto, net, im_detect,
-            keep_feat=False, batch_size=args.boxes_num_per_batch)
+            new_track_proto = track_propagation(vid_proto, track_proto, net, im_detect,
+                keep_feat=False, batch_size=args.boxes_num_per_batch)
 
-        # add ground truth targets if annotation file is given
-        if args.annot_dir is not None:
-            annot_file = osp.join(args.annot_dir,
-                vid+'.annot')
-            annot_proto = proto_load(annot_file)
-            add_track_targets(track_proto, annot_proto)
+            # add ground truth targets if annotation file is given
+            if args.annot_dir is not None:
+                annot_file = osp.join(args.annot_dir,
+                    vid+'.annot')
+                annot_proto = proto_load(annot_file)
+                add_track_targets(track_proto, annot_proto)
 
-        if args.zip:
-            save_track_proto_to_zip(new_track_proto, save_file)
-        else:
-            proto_dump(new_track_proto, save_file)
+            if args.zip:
+                save_track_proto_to_zip(new_track_proto, save_file)
+            else:
+                proto_dump(new_track_proto, save_file)
+        except BaseException as e:
+            print "Error: {} for {}".format(e, vid)
