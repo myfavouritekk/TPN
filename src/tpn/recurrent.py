@@ -24,6 +24,7 @@ logging = tf.logging
 flags.DEFINE_string("data_path", None, "data_path")
 flags.DEFINE_string("save_path", '.', "save_path")
 flags.DEFINE_string("config", '.', "RNN config file.")
+flags.DEFINE_string("snapshot", None, "Previous model")
 FLAGS = flags.FLAGS
 
 if not osp.isdir(FLAGS.save_path):
@@ -112,6 +113,10 @@ def main(_):
     tf.initialize_all_variables().run()
 
     saver = tf.train.Saver()
+    if FLAGS.snapshot:
+      log.info("Restoring from {}".format(FLAGS.snapshot))
+      saver.restore(session, FLAGS.snapshot)
+
     for i in range(config.max_epoch):
       log.info("New epoch {}: processing data...".format(i+1))
       raw_data = tpn_raw_data(FLAGS.data_path)
