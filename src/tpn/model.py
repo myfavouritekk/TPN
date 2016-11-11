@@ -58,6 +58,7 @@ class TPNModel(object):
     # output: (num_steps * batch_size) * input_size
     output = tf.reshape(tf.concat(0, outputs), [-1, size])
 
+    self._small_lr_vars = []
     # build losses
     # class score
     if config.cls_init:
@@ -67,6 +68,8 @@ class TPNModel(object):
         cls_w, cls_b = cPickle.load(f)
         softmax_w = tf.get_variable("softmax_w", initializer=tf.constant(cls_w))
         softmax_b = tf.get_variable("softmax_b", initializer=tf.constant(cls_b))
+        self._small_lr_vars.append(softmax_w.name)
+        self._small_lr_vars.append(softmax_b.name)
     else:
       softmax_w = tf.get_variable("softmax_w", [size, num_classes])
       softmax_b = tf.get_variable("softmax_b", [num_classes], initializer=tf.constant_initializer(0.))
@@ -84,6 +87,8 @@ class TPNModel(object):
         bbox_w, bbox_b = cPickle.load(f)
       bbox_w = tf.get_variable("bbox_w", initializer=tf.constant(bbox_w))
       bbox_b = tf.get_variable("bbox_b", initializer=tf.constant(bbox_b))
+      self._small_lr_vars.append(bbox_w.name)
+      self._small_lr_vars.append(bbox_b.name)
     else:
       bbox_w = tf.get_variable("bbox_w", [size, num_classes * 4])
       bbox_b = tf.get_variable("bbox_b", [num_classes * 4])
@@ -108,12 +113,24 @@ class TPNModel(object):
     if not is_training:
       return
 
-    self._lr = tf.Variable(0.0, trainable=False)
+    self._lr = tf.Variable(1.0, trainable=False)
     tvars = tf.trainable_variables()
-    grads, global_norm = tf.clip_by_global_norm(tf.gradients(cost, tvars),
+    n_tvars = []
+    s_tvars = []
+    for tvar in tvars:
+        if tvar.name in self._small_lr_vars:
+            s_tvars.append(tvar)
+        else:
+            n_tvars.append(tvar)
+    s_grads, global_norm = tf.clip_by_global_norm(tf.gradients(cost, s_tvars),
                                       config.max_grad_norm)
-    optimizer = tf.train.MomentumOptimizer(self.lr, self.momentum)
-    self._train_op = optimizer.apply_gradients(zip(grads, tvars))
+    n_grads, global_norm = tf.clip_by_global_norm(tf.gradients(cost, n_tvars),
+                                      config.max_grad_norm)
+    n_optimizer = tf.train.MomentumOptimizer(self.lr, self.momentum)
+    s_optimizer = tf.train.MomentumOptimizer(self.lr * 0.01, self.momentum)
+    self._train_op = tf.group(
+        n_optimizer.apply_gradients(zip(n_grads, n_tvars)),
+        s_optimizer.apply_gradients(zip(s_grads, s_tvars)))
     self.global_norm = global_norm
 
   def assign_lr(self, session, lr_value):
