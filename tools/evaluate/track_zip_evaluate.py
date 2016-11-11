@@ -88,7 +88,7 @@ if __name__ == '__main__':
                 cls_boxes = boxes[inds, j*4:(j+1)*4]
                 cls_dets = np.hstack((cls_boxes, cls_scores[:, np.newaxis])) \
                     .astype(np.float32, copy=False)
-                keep = nms(cls_dets, 0.3)
+                keep = nms(cls_dets, 0.3, force_cpu=True)
                 cls_dets = cls_dets[keep, :]
                 all_boxes[j][global_idx] = cls_dets
 
