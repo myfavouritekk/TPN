@@ -2,7 +2,6 @@
 # from __future__ import division
 # from __future__ import print_function
 import random
-#random.seed(1017)
 
 import time
 
@@ -40,11 +39,12 @@ def run_epoch(session, m, data, eval_op, init_state, epoch_idx, verbose=False):
   end_costs = 0.0
   display_iter = 20.
   smooth_iter = 100
-  state = init_state
   smooth_loss = deque()
   for step in xrange(m.iter_epoch):
     x, cls_t, end_t, bbox_t, bbox_weights = tpn_iterator(data, m.batch_size, m.num_steps, m.num_classes, m.vid_per_batch)
     data_time = time.time()
+    # refresh state every iteration
+    state = m.initial_state.eval()
     cost, cls_cost, bbox_cost, end_cost, state, _, global_norm = session.run(
         [m.cost, m.cls_cost, m.bbox_cost, m.end_cost, m.final_state, eval_op,  m.global_norm],
          {m.input_data: x,
@@ -101,10 +101,9 @@ def main(_):
   config = get_config('train')
   eval_config = get_config('test')
 
-  #tf.set_random_seed(1017)
   with tf.Graph().as_default(), tf.Session() as session:
     initializer = tf.random_uniform_initializer(-config.init_scale,
-                                                config.init_scale, seed=1017)
+                                                config.init_scale)
     with tf.variable_scope("model", reuse=None, initializer=initializer):
       m = TPNModel(is_training=True, config=config)
     with tf.variable_scope("model", reuse=True, initializer=initializer):
@@ -112,11 +111,12 @@ def main(_):
 
     tf.initialize_all_variables().run()
 
-    saver = tf.train.Saver()
+    saver = tf.train.Saver(max_to_keep=100000)
     if FLAGS.snapshot:
       log.info("Restoring from {}".format(FLAGS.snapshot))
       saver.restore(session, FLAGS.snapshot)
 
+    state = m.initial_state.eval()
     for i in range(config.max_epoch):
       log.info("New epoch {}: processing data...".format(i+1))
       raw_data = tpn_raw_data(FLAGS.data_path)
@@ -125,8 +125,6 @@ def main(_):
       lr_decay = config.lr_decay ** i
       m.assign_lr(session, config.learning_rate * lr_decay)
 
-      if i == 0:
-        state = m.initial_state.eval()
       log.info("Epoch: {} Learning rate {:.03e}.".format(i+1,session.run(m.lr)))
       train_cost, state = run_epoch(session, m, train_data, m.train_op,
                              state, i, verbose=True)
