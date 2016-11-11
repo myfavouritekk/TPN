@@ -17,8 +17,11 @@ if __name__ == '__main__':
     parser.add_argument('bbox_std')
     parser.add_argument('save_cls_param_file')
     parser.add_argument('save_bbox_param_file')
+    parser.add_argument('--gpu', type=int, default=0)
     args = parser.parse_args()
 
+    caffe.set_mode_gpu()
+    caffe.set_device(args.gpu)
     net = caffe.Net(args.def_file, args.param, caffe.TEST)
 
     cls_w = net.params['cls_score_vid'][0].data.T
