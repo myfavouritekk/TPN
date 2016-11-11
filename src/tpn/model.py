@@ -76,8 +76,11 @@ class TPNModel(object):
     logits = tf.matmul(output, softmax_w) + softmax_b
     self._cls_scores = tf.nn.softmax(logits, name='cls_scores')
     # transpose cls_targets to make num_steps the leading axis
-    cls_targets = tf.reshape(tf.transpose(self._cls_targets), [-1])
-    loss_cls_score = tf.nn.sparse_softmax_cross_entropy_with_logits(logits, cls_targets, name='loss_cls_score')
+    # class label may be -1, one-hot tensor will ignore them
+    cls_targets = tf.one_hot(
+        tf.reshape(tf.transpose(self._cls_targets), [-1]),
+        num_classes, 1., 0.)
+    loss_cls_score = tf.nn.softmax_cross_entropy_with_logits(logits, cls_targets, name='loss_cls_score')
     self._cls_cost = cls_cost = tf.reduce_sum(loss_cls_score) / batch_size / num_steps
 
     # boudning box regression: L2 loss
@@ -293,8 +296,10 @@ class BiTPNModel(object):
     logits = tf.matmul(output, softmax_w) + softmax_b
     self._cls_scores = tf.nn.softmax(logits, name='cls_scores')
     # transpose cls_targets to make num_steps the leading axis
-    cls_targets = tf.reshape(tf.transpose(self._cls_targets), [-1])
-    loss_cls_score = tf.nn.sparse_softmax_cross_entropy_with_logits(logits, cls_targets, name='loss_cls_score')
+    cls_targets = tf.one_hot(
+        tf.reshape(tf.transpose(self._cls_targets), [-1]),
+        num_classes, 1., 0.)
+    loss_cls_score = tf.nn.softmax_cross_entropy_with_logits(logits, cls_targets, name='loss_cls_score')
     self._cls_cost = cls_cost = tf.reduce_sum(loss_cls_score) / batch_size / num_steps
 
     # boudning box regression: L2 loss
