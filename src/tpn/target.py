@@ -14,6 +14,9 @@ def add_track_targets(track_proto, annot_proto, verbose=True):
     # initialize fields
     processed_annot['exist'] = np.zeros((num_gt, max_gt_frame), dtype=np.float)
     processed_annot['bbox'] = np.zeros((num_gt, 4, max_gt_frame), dtype=np.float)
+    # make sure bbox area is 0
+    processed_annot['bbox'][:,1,:] = -1.
+    processed_annot['bbox'][:,3,:] = -1.
     processed_annot['class_index'] = np.zeros((num_gt, max_gt_frame), dtype=np.float)
     processed_annot['occluded'] = np.zeros((num_gt, max_gt_frame), dtype=np.float)
 
