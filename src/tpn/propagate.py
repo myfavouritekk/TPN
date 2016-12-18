@@ -2,7 +2,8 @@
 # propagate bounding boxes
 
 from fast_rcnn.craft import im_detect, sequence_im_detect
-from fast_rcnn.bbox_transform import bbox_transform_inv
+from fast_rcnn.bbox_transform import bbox_transform_inv, bbox_transform
+from utils.cython_bbox import bbox_overlaps
 from vdetlib.utils.protocol import frame_path_at, boxes_at_frame
 from vdetlib.utils.timer import Timer
 from vdetlib.utils.common import imread
@@ -96,7 +97,11 @@ def _cur_rois(tracks, frame_id):
     for track_id, track in enumerate(tracks):
         for box in track:
             if box['frame'] == frame_id:
-                rois.append(box['roi'])
+                try:
+                    rois.append(box['roi'])
+                except:
+                    import pdb
+                    pdb.set_trace()
                 index.append(track_id)
                 break
     return rois, index
@@ -576,3 +581,94 @@ def sequence_roi_propagation(vid_proto, box_proto, net, det_fun=sequence_im_dete
     track_proto['tracks'] = tracks
     return track_proto
 
+def _gt_propagate_boxes(boxes, annot_proto, frame_id, window, overlap_thres):
+    pred_boxes = []
+    annots = []
+    for annot in annot_proto['annotations']:
+        for idx, box in enumerate(annot['track']):
+            if box['frame'] == frame_id:
+                gt1 = box['bbox']
+                deltas = []
+                deltas.append(gt1)
+                for offset in xrange(1, window):
+                    try:
+                        gt2 = annot['track'][idx+offset]['bbox']
+                    except IndexError:
+                        gt2 = gt1
+                    delta = bbox_transform(np.asarray([gt1]), np.asarray([gt2]))
+                    deltas.append(delta)
+                annots.append(deltas)
+    gt1s = [annot[0] for annot in annots]
+    if not gt1s:
+        # no grount-truth, boxes remain still
+        return np.tile(np.asarray(boxes)[:,np.newaxis,:], [1,window-1,1])
+    overlaps = bbox_overlaps(np.require(boxes, dtype=np.float),
+                             np.require(gt1s, dtype=np.float))
+    assert len(overlaps) == len(boxes)
+    for gt_overlaps, box in zip(overlaps, boxes):
+        max_overlap = np.max(gt_overlaps)
+        max_gt = np.argmax(gt_overlaps)
+        sequence_box = []
+        if max_overlap < overlap_thres:
+            for offset in xrange(1, window):
+                sequence_box.append(box)
+        else:
+            for offset in xrange(1, window):
+                delta = annots[max_gt][offset]
+                sequence_box.append(
+                    bbox_transform_inv(np.asarray([box]), delta)[0].tolist())
+        pred_boxes.append((sequence_box))
+    return np.asarray(pred_boxes)
+
+def gt_motion_propagation(vid_proto, box_proto, annot_proto,
+        window=2, length=None,
+        sample_rate=1, offset=0, overlap_thres=0.5):
+    track_proto = {}
+    track_proto['video'] = vid_proto['video']
+    track_proto['method'] = 'gt_motion_propagation'
+    max_frame = vid_proto['frames'][-1]['frame']
+    if not length: length = max_frame
+    tracks = _box_proto_to_track(box_proto, max_frame, length, sample_rate, offset)
+
+    track_anchors = sorted(set([track[0]['frame'] for track in tracks]))
+    sequence_frames = _sequence_frames(vid_proto, window,
+        track_anchors, length)
+    for idx, frames in enumerate(sequence_frames, start=1):
+        # Detect all object classes and regress object bounds
+        # extract rois on the current frame
+        try:
+            rois, track_index = _cur_rois(tracks, frames[0]['frame'])
+        except:
+            import pdb
+            pdb.set_trace()
+        if len(rois) == 0: continue
+
+        timer = Timer()
+        timer.tic()
+
+        boxes = _gt_propagate_boxes(rois, annot_proto,
+            frames[0]['frame'], window, overlap_thres)
+        features = None
+
+        # update track bbox
+        boxes = boxes.reshape((len(rois), window-1, 4))
+        frame_ids = [frame['frame'] for frame in frames]
+        prev_id = -1
+        for i in xrange(window):
+            frame_id = frames[i]['frame']
+            # stop when encounting duplicate frames
+            if frame_id == prev_id:
+                break
+            prev_id = frame_id
+            if i == 0:
+                _update_track_by_key(tracks, 'bbox', rois, track_index, frame_id)
+            else:
+                # minus 1 because boxes[0] correspond to the second frame
+                _update_track_by_key(tracks, 'bbox', boxes[:,i-1,:].tolist(), track_index, frame_id)
+                _update_track_by_key(tracks, 'roi', boxes[:,i-1,:].tolist(), track_index, frame_id)
+
+        timer.toc()
+        print ('Frame {}-{}: Detection took {:.3f}s for '
+               '{:d} object proposals').format(frame_ids[0], frame_ids[-1], timer.total_time, len(rois))
+    track_proto['tracks'] = tracks
+    return track_proto

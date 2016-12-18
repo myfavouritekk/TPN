@@ -20,7 +20,6 @@ this_dir = osp.dirname(__file__)
 
 # add py-faster-rcnn paths
 sys.path.insert(0, osp.join(this_dir, '../../external/py-faster-rcnn/lib'))
-from fast_rcnn.craft import sequence_im_detect
 from fast_rcnn.config import cfg, cfg_from_file, cfg_from_list
 
 # add external libs
