@@ -40,6 +40,7 @@ def _accuracy(track, gt):
         return [], []
     abs_acc = []
     rel_acc = []
+    ious = []
     st_frame = track[0]['frame']
     end_frame = track[-1]['frame']
     assert end_frame - st_frame + 1 == len(track)
@@ -55,12 +56,14 @@ def _accuracy(track, gt):
         # target is the first track_bbox with gt motion
         track_bbox_target = bbox_transform_inv(track_bbox1, gt_delta)
         abs_diff = np.abs(track_bbox - track_bbox_target)
+        cur_iou = iou(track_bbox, track_bbox_target)
         width = track_bbox_target[0,2] - track_bbox_target[0,0]
         height = track_bbox_target[0,3] - track_bbox_target[0,1]
         rel_diff = abs_diff / (np.asarray([width, height, width, height]) + np.finfo(float).eps)
         abs_acc.extend(abs_diff.flatten().tolist())
         rel_acc.extend(rel_diff.flatten().tolist())
-    return abs_acc, rel_acc
+        ious.extend(cur_iou.flatten().tolist())
+    return abs_acc, rel_acc, ious
 
 
 if __name__ == '__main__':
@@ -76,7 +79,7 @@ if __name__ == '__main__':
     track_proto = proto_load(args.track_file)
     annot_proto = proto_load(args.annot_file)
 
-    acc = {'abs_acc':[], 'rel_acc':[]}
+    acc = {'abs_acc':[], 'rel_acc':[], 'ious':[]}
     for track in track_proto['tracks']:
         frame1_id = track[0]['frame']
         annots = annots_at_frame(annot_proto, frame1_id)
@@ -89,9 +92,10 @@ if __name__ == '__main__':
         max_gt = np.argmax(gt_overlaps, axis=1)[0]
         gt_idx = annots[max_gt][1]
         gt_annot = annot_by_id(annot_proto, gt_idx)
-        abs_acc, rel_acc = _accuracy(track, gt_annot)
+        abs_acc, rel_acc, ious = _accuracy(track, gt_annot)
         acc['abs_acc'].extend(abs_acc)
         acc['rel_acc'].extend(rel_acc)
-    print "{}: abs_diff {:.06f} relative_diff {:.06f}".format(
+        acc['ious'].extend(ious)
+    print "{}: abs_diff {:.06f} relative_diff {:.06f} mean IOU: {:.06f}".format(
         vid_proto['video'], np.mean(acc['abs_acc']),
-        np.mean(acc['rel_acc']))
+        np.mean(acc['rel_acc']), np.mean(acc['ious']))
