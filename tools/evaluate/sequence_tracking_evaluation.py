@@ -37,7 +37,7 @@ def select_gt_segment(gt, st, end):
 
 def _accuracy(track, gt):
     if len(track) < 2:
-        return [], []
+        return [], [], []
     abs_acc = []
     rel_acc = []
     ious = []
@@ -92,7 +92,13 @@ if __name__ == '__main__':
         max_gt = np.argmax(gt_overlaps, axis=1)[0]
         gt_idx = annots[max_gt][1]
         gt_annot = annot_by_id(annot_proto, gt_idx)
-        abs_acc, rel_acc, ious = _accuracy(track, gt_annot)
+        try:
+            abs_acc, rel_acc, ious = _accuracy(track, gt_annot)
+        except:
+            import pdb
+            pdb.set_trace()
+            print vid_proto['video']
+            raise
         acc['abs_acc'].extend(abs_acc)
         acc['rel_acc'].extend(rel_acc)
         acc['ious'].extend(ious)
