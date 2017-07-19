@@ -54,9 +54,6 @@ proposal files contains two fields: `boxes` contains box proposals, `images` con
 ```sh
 >> python tools/data/box_proto_from_proposals.py proposal_file vid_root save_dir
 ```
-```sh
->> python tools/data/box_proto_from_proposals.py proposal_file vid_root save_root
-```
 
 3. Generating tubelets with `TPN`:
     1. Download [CVPR 2017 models](https://drive.google.com/open?id=0B3iwZajbYbLzUUtzaTBSb18tUTg) and extract to `CVPR2017_models`.
