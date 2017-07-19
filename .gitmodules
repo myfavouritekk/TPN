@@ -4,7 +4,7 @@
   ignore = dirty
 [submodule "external/vdetlib"]
 	path = external/vdetlib
-	url = git@github.com:myfavouritekk/vdetlib.git
+	url = https://github.com/myfavouritekk/vdetlib.git
   ignore = dirty
 [submodule "external/caffe-mpi"]
 	path = external/caffe-mpi
